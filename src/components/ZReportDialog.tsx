@@ -1,0 +1,455 @@
+import React, { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { db, Shift } from "@/lib/indexedDB";
+import { getShiftCashSummary } from "@/lib/cashMovementService";
+import { Printer, AlertCircle, DollarSign } from "lucide-react";
+import { toast } from "sonner";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  shiftId: number;
+  onConfirm: (actualCash: number, denominations: Denominations) => void;
+}
+
+interface Denominations {
+  notes200: number;
+  notes100: number;
+  notes50: number;
+  notes20: number;
+  notes10: number;
+  notes5: number;
+  coins1: number;
+}
+
+const DENOMINATION_VALUES = {
+  notes200: 200,
+  notes100: 100,
+  notes50: 50,
+  notes20: 20,
+  notes10: 10,
+  notes5: 5,
+  coins1: 1,
+};
+
+export function ZReportDialog({
+  open,
+  onOpenChange,
+  shiftId,
+  onConfirm,
+}: Props) {
+  const [shift, setShift] = useState<Shift | null>(null);
+  const [cashSummary, setCashSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [denominations, setDenominations] = useState<Denominations>({
+    notes200: 0,
+    notes100: 0,
+    notes50: 0,
+    notes20: 0,
+    notes10: 0,
+    notes5: 0,
+    coins1: 0,
+  });
+
+  useEffect(() => {
+    if (open) {
+      loadReport();
+    }
+  }, [open, shiftId]);
+
+  const loadReport = async () => {
+    setLoading(true);
+    try {
+      const shiftData = await db.get<Shift>("shifts", shiftId.toString());
+      if (!shiftData) {
+        toast.error("الوردية غير موجودة");
+        return;
+      }
+
+      const cashData = await getShiftCashSummary(shiftId);
+
+      setShift(shiftData);
+      setCashSummary(cashData);
+    } catch (error) {
+      console.error("Error loading Z report:", error);
+      toast.error("فشل تحميل تقرير Z");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateTotalFromDenominations = (): number => {
+    return Object.entries(denominations).reduce((total, [key, count]) => {
+      const value = DENOMINATION_VALUES[key as keyof Denominations];
+      return total + value * count;
+    }, 0);
+  };
+
+  const actualCash = calculateTotalFromDenominations();
+  const difference = actualCash - (cashSummary?.expectedCash || 0);
+
+  const handleDenominationChange = (
+    key: keyof Denominations,
+    value: string
+  ) => {
+    const numValue = parseInt(value) || 0;
+    setDenominations((prev) => ({ ...prev, [key]: numValue }));
+  };
+
+  const handleConfirm = () => {
+    if (actualCash === 0) {
+      toast.error("يرجى إدخال الفئات النقدية");
+      return;
+    }
+    onConfirm(actualCash, denominations);
+    onOpenChange(false);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("ar-EG", {
+      style: "currency",
+      currency: "EGP",
+    }).format(amount);
+  };
+
+  const formatDateTime = (date: string) => {
+    return new Intl.DateTimeFormat("ar-EG", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(date));
+  };
+
+  if (loading) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          dir="rtl"
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
+        >
+          <div className="text-center py-8">جاري التحميل...</div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        dir="rtl"
+        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-2xl flex items-center gap-2">
+            <DollarSign className="h-6 w-6" />
+            تقرير Z - إغلاق الوردية
+          </DialogTitle>
+        </DialogHeader>
+
+        {shift && cashSummary && (
+          <div className="space-y-4">
+            {/* معلومات الوردية */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">معلومات الوردية</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">المسؤول</p>
+                  <p className="font-bold">{shift.employeeName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">وقت البدء</p>
+                  <p className="font-bold">{formatDateTime(shift.startTime)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    الرصيد الافتتاحي
+                  </p>
+                  <p className="font-bold text-primary">
+                    {formatCurrency(shift.startingCash)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">الحالة</p>
+                  <Badge
+                    variant={
+                      shift.status === "active" ? "default" : "secondary"
+                    }
+                  >
+                    {shift.status === "active" ? "نشطة" : "مغلقة"}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ملخص المبيعات */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">ملخص المبيعات</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span>إجمالي المبيعات:</span>
+                  <span className="font-bold text-green-600">
+                    {formatCurrency(shift.sales.totalAmount)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>عدد الفواتير:</span>
+                  <span className="font-bold">{shift.sales.totalInvoices}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span>مبيعات نقداً:</span>
+                  <span className="font-bold">
+                    {formatCurrency(shift.sales.cashSales)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>مبيعات بطاقات:</span>
+                  <span className="font-bold">
+                    {formatCurrency(shift.sales.cardSales)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>محافظ إلكترونية:</span>
+                  <span className="font-bold">
+                    {formatCurrency(shift.sales.walletSales)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* الحركات النقدية */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">الحركات النقدية</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span>إيداعات نقدية:</span>
+                  <span className="font-bold text-green-600">
+                    +{formatCurrency(cashSummary.cashIn)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>سحوبات نقدية:</span>
+                  <span className="font-bold text-red-600">
+                    -{formatCurrency(cashSummary.cashOut)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* إدخال الفئات النقدية */}
+            <Card className="border-2 border-primary">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-primary" />
+                  عد النقدية الفعلية
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <Label>فئة 200 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes200 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes200", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes200 * 200)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 100 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes100 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes100", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes100 * 100)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 50 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes50 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes50", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes50 * 50)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 20 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes20 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes20", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes20 * 20)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 10 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes10 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes10", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes10 * 10)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 5 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.notes5 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("notes5", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.notes5 * 5)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label>فئة 1 جنيه</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={denominations.coins1 || ""}
+                      onChange={(e) =>
+                        handleDenominationChange("coins1", e.target.value)
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      = {formatCurrency(denominations.coins1 * 1)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* مقارنة النقدية */}
+            <Card
+              className={difference !== 0 ? "border-2 border-orange-500" : ""}
+            >
+              <CardHeader>
+                <CardTitle className="text-lg">مقارنة النقدية</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between text-lg">
+                  <span>النقدية المتوقعة:</span>
+                  <span className="font-bold">
+                    {formatCurrency(cashSummary.expectedCash)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-lg">
+                  <span>النقدية الفعلية:</span>
+                  <span className="font-bold text-primary">
+                    {formatCurrency(actualCash)}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex justify-between text-xl">
+                  <span className="font-bold">الفرق:</span>
+                  <span
+                    className={`font-bold ${
+                      difference > 0
+                        ? "text-green-600"
+                        : difference < 0
+                        ? "text-red-600"
+                        : ""
+                    }`}
+                  >
+                    {difference > 0 ? "+" : ""}
+                    {formatCurrency(difference)}
+                  </span>
+                </div>
+                {difference !== 0 && (
+                  <div className="mt-4 p-3 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                    <p className="text-sm text-orange-800 dark:text-orange-300 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {difference > 0
+                        ? "هناك زيادة في النقدية. يرجى التحقق من العد."
+                        : "هناك نقص في النقدية. يرجى التحقق من العد."}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
+          <Button variant="outline" onClick={handlePrint}>
+            <Printer className="ml-2 h-4 w-4" />
+            طباعة
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            تأكيد إغلاق الوردية
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
