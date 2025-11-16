@@ -2,7 +2,16 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  HashRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { ShiftProvider } from "@/contexts/ShiftContext";
@@ -40,6 +49,25 @@ import PrinterSettings from "./pages/PrinterSettings";
 
 const queryClient = new QueryClient();
 
+// مكون لتنظيف المسار الأولي في Electron
+const RouteCleanup = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // إذا كان المسار يحتوي على file path، أعد التوجيه إلى الصفحة الرئيسية
+    if (
+      location.pathname.includes(".html") ||
+      location.pathname.includes("/Contents/Resources/") ||
+      location.pathname.includes("/Volumes/")
+    ) {
+      navigate("/", { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  return <>{children}</>;
+};
+
 // مكون حماية المسارات
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
@@ -59,257 +87,265 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <ShiftProvider>
-            <SettingsProvider>
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <POSv2 />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/pos-old"
-                  element={
-                    <ProtectedRoute>
-                      <Index />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/customers"
-                  element={
-                    <ProtectedRoute>
-                      <Customers />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/reports"
-                  element={
-                    <ProtectedRoute>
-                      <Reports />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/suppliers"
-                  element={
-                    <ProtectedRoute>
-                      <Suppliers />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/inventory"
-                  element={
-                    <ProtectedRoute>
-                      <Inventory />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/product-categories"
-                  element={
-                    <ProtectedRoute>
-                      <ProductCategories />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/employees"
-                  element={
-                    <ProtectedRoute>
-                      <Employees />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/employee-advances"
-                  element={
-                    <ProtectedRoute>
-                      <EmployeeAdvances />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/employee-deductions"
-                  element={
-                    <ProtectedRoute>
-                      <EmployeeDeductions />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/restaurant"
-                  element={
-                    <ProtectedRoute>
-                      <Restaurant />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/promotions"
-                  element={
-                    <ProtectedRoute>
-                      <Promotions />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/settings"
-                  element={
-                    <ProtectedRoute>
-                      <Settings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/roles-permissions"
-                  element={
-                    <ProtectedRoute>
-                      <RolesPermissions />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/installments"
-                  element={
-                    <ProtectedRoute>
-                      <Installments />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/credit"
-                  element={
-                    <ProtectedRoute>
-                      <Credit />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/shifts"
-                  element={
-                    <ProtectedRoute>
-                      <Shifts />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/sales-returns"
-                  element={
-                    <ProtectedRoute>
-                      <SalesReturns />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/purchase-returns"
-                  element={
-                    <ProtectedRoute>
-                      <PurchaseReturns />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/deposit-sources"
-                  element={
-                    <ProtectedRoute>
-                      <DepositSources />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/deposits"
-                  element={
-                    <ProtectedRoute>
-                      <Deposits />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/expense-categories"
-                  element={
-                    <ProtectedRoute>
-                      <ExpenseCategories />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/expenses"
-                  element={
-                    <ProtectedRoute>
-                      <Expenses />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/whatsapp-management"
-                  element={
-                    <ProtectedRoute>
-                      <WhatsAppManagement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/whatsapp-campaigns"
-                  element={
-                    <ProtectedRoute>
-                      <WhatsAppCampaigns />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/units"
-                  element={
-                    <ProtectedRoute>
-                      <Units />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/price-types"
-                  element={
-                    <ProtectedRoute>
-                      <PriceTypes />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/payment-methods"
-                  element={
-                    <ProtectedRoute>
-                      <PaymentMethods />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/printer-settings"
-                  element={
-                    <ProtectedRoute>
-                      <PrinterSettings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </SettingsProvider>
-          </ShiftProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  // استخدام HashRouter في Electron و BrowserRouter في الويب
+  const isElectron = !!(window as any).electronAPI;
+  const Router = isElectron ? HashRouter : BrowserRouter;
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <Router>
+          <RouteCleanup>
+            <AuthProvider>
+              <ShiftProvider>
+                <SettingsProvider>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route
+                      path="/"
+                      element={
+                        <ProtectedRoute>
+                          <POSv2 />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/pos-old"
+                      element={
+                        <ProtectedRoute>
+                          <Index />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/customers"
+                      element={
+                        <ProtectedRoute>
+                          <Customers />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/reports"
+                      element={
+                        <ProtectedRoute>
+                          <Reports />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/suppliers"
+                      element={
+                        <ProtectedRoute>
+                          <Suppliers />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/inventory"
+                      element={
+                        <ProtectedRoute>
+                          <Inventory />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/product-categories"
+                      element={
+                        <ProtectedRoute>
+                          <ProductCategories />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/employees"
+                      element={
+                        <ProtectedRoute>
+                          <Employees />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/employee-advances"
+                      element={
+                        <ProtectedRoute>
+                          <EmployeeAdvances />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/employee-deductions"
+                      element={
+                        <ProtectedRoute>
+                          <EmployeeDeductions />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/restaurant"
+                      element={
+                        <ProtectedRoute>
+                          <Restaurant />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/promotions"
+                      element={
+                        <ProtectedRoute>
+                          <Promotions />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/settings"
+                      element={
+                        <ProtectedRoute>
+                          <Settings />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/roles-permissions"
+                      element={
+                        <ProtectedRoute>
+                          <RolesPermissions />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/installments"
+                      element={
+                        <ProtectedRoute>
+                          <Installments />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/credit"
+                      element={
+                        <ProtectedRoute>
+                          <Credit />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/shifts"
+                      element={
+                        <ProtectedRoute>
+                          <Shifts />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/sales-returns"
+                      element={
+                        <ProtectedRoute>
+                          <SalesReturns />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/purchase-returns"
+                      element={
+                        <ProtectedRoute>
+                          <PurchaseReturns />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/deposit-sources"
+                      element={
+                        <ProtectedRoute>
+                          <DepositSources />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/deposits"
+                      element={
+                        <ProtectedRoute>
+                          <Deposits />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/expense-categories"
+                      element={
+                        <ProtectedRoute>
+                          <ExpenseCategories />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/expenses"
+                      element={
+                        <ProtectedRoute>
+                          <Expenses />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/whatsapp-management"
+                      element={
+                        <ProtectedRoute>
+                          <WhatsAppManagement />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/whatsapp-campaigns"
+                      element={
+                        <ProtectedRoute>
+                          <WhatsAppCampaigns />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/units"
+                      element={
+                        <ProtectedRoute>
+                          <Units />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/price-types"
+                      element={
+                        <ProtectedRoute>
+                          <PriceTypes />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/payment-methods"
+                      element={
+                        <ProtectedRoute>
+                          <PaymentMethods />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/printer-settings"
+                      element={
+                        <ProtectedRoute>
+                          <PrinterSettings />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </SettingsProvider>
+              </ShiftProvider>
+            </AuthProvider>
+          </RouteCleanup>
+        </Router>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

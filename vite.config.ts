@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
       host: "::",
       port: 8080,
     },
+    base: isElectron && mode === "production" ? "./" : "/",
     plugins: plugins.filter(Boolean),
     resolve: {
       alias: {

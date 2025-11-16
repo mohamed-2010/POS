@@ -101,11 +101,16 @@ if (!gotTheLock) {
           "dist",
           "index.html"
         );
-        mainWindow.loadFile(indexPath);
+        // استخدام file:// protocol بشكل صريح
+        mainWindow.loadFile(indexPath).catch((err) => {
+          console.error("Failed to load index.html:", err);
+        });
       } else {
         // في بيئة التطوير
         const indexPath = path.join(process.env.DIST || "", "index.html");
-        mainWindow.loadFile(indexPath);
+        mainWindow.loadFile(indexPath).catch((err) => {
+          console.error("Failed to load index.html:", err);
+        });
       }
     }
 

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { useNavigate } from "react-router-dom";
 import {
   Settings as SettingsIcon,
   Printer,
@@ -22,6 +23,7 @@ import { db } from "@/lib/indexedDB";
 const Settings = () => {
   const { can } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const {
     settings,
     getSetting,
@@ -238,9 +240,7 @@ const Settings = () => {
                   <Printer className="h-5 w-5" />
                   إعدادات الطابعات
                 </h2>
-                <Button
-                  onClick={() => (window.location.href = "/printer-settings")}
-                >
+                <Button onClick={() => navigate("/printer-settings")}>
                   إعدادات الطباعة الحرارية
                 </Button>
               </div>
@@ -253,7 +253,7 @@ const Settings = () => {
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() => (window.location.href = "/printer-settings")}
+                    onClick={() => navigate("/printer-settings")}
                   >
                     <Printer className="h-4 w-4 ml-2" />
                     فتح إعدادات الطابعة
