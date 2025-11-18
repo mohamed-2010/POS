@@ -21,16 +21,36 @@ import { Label } from "@/components/ui/label";
 import { POSHeader } from "@/components/POS/POSHeader";
 import { db, Invoice, Customer } from "@/lib/indexedDB";
 import { toast } from "sonner";
-import { CreditCard, AlertCircle, DollarSign } from "lucide-react";
+import {
+  CreditCard,
+  AlertCircle,
+  DollarSign,
+  Search,
+  User,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Credit() {
   const { can } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null
+  );
   const [paymentAmount, setPaymentAmount] = useState("");
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [isCustomerPaymentDialogOpen, setIsCustomerPaymentDialogOpen] =
+    useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCustomerId, setFilterCustomerId] = useState<string>("all");
 
   useEffect(() => {
     loadData();
@@ -95,6 +115,76 @@ export default function Credit() {
     setSelectedInvoice(null);
   };
 
+  // دفع من رصيد العميل الإجمالي
+  const openCustomerPaymentDialog = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setPaymentAmount("");
+    setIsCustomerPaymentDialogOpen(true);
+  };
+
+  const handleCustomerPayment = async () => {
+    if (!selectedCustomer) return;
+
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("الرجاء إدخال مبلغ صحيح");
+      return;
+    }
+
+    if (amount > selectedCustomer.currentBalance) {
+      toast.error("المبلغ المدخل أكبر من رصيد العميل");
+      return;
+    }
+
+    // جلب جميع فواتير العميل الآجلة
+    const customerInvoices = invoices
+      .filter(
+        (inv) =>
+          inv.customerId === selectedCustomer.id && inv.remainingAmount > 0
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      ); // الأقدم أولاً
+
+    let remainingPayment = amount;
+
+    // توزيع المبلغ على الفواتير من الأقدم للأحدث
+    for (const invoice of customerInvoices) {
+      if (remainingPayment <= 0) break;
+
+      const paymentForThisInvoice = Math.min(
+        remainingPayment,
+        invoice.remainingAmount
+      );
+
+      const updatedInvoice: Invoice = {
+        ...invoice,
+        paidAmount: invoice.paidAmount + paymentForThisInvoice,
+        remainingAmount: invoice.remainingAmount - paymentForThisInvoice,
+        paymentStatus:
+          invoice.remainingAmount - paymentForThisInvoice <= 0.01
+            ? "paid"
+            : "partial",
+      };
+
+      await db.update("invoices", updatedInvoice);
+      remainingPayment -= paymentForThisInvoice;
+    }
+
+    // تحديث رصيد العميل
+    const updatedCustomer: Customer = {
+      ...selectedCustomer,
+      currentBalance: selectedCustomer.currentBalance - amount,
+    };
+    await db.update("customers", updatedCustomer);
+
+    toast.success(`تم تسجيل دفعة بقيمة ${amount.toFixed(2)} جنيه`);
+    loadData();
+    setIsCustomerPaymentDialogOpen(false);
+    setSelectedCustomer(null);
+  };
+
   const getTotalCredit = () => {
     return invoices.reduce((sum, inv) => sum + inv.remainingAmount, 0);
   };
@@ -123,6 +213,52 @@ export default function Credit() {
     return diff > 0 ? diff : 0;
   };
 
+  // الحصول على قائمة العملاء الذين لديهم ديون
+  const getCustomersWithDebts = () => {
+    const customersMap = new Map<
+      string,
+      { customer: Customer; totalDebt: number; invoiceCount: number }
+    >();
+
+    invoices
+      .filter((inv) => inv.remainingAmount > 0)
+      .forEach((inv) => {
+        if (inv.customerId) {
+          const customer = customers.find((c) => c.id === inv.customerId);
+          if (customer) {
+            const existing = customersMap.get(inv.customerId);
+            if (existing) {
+              existing.totalDebt += inv.remainingAmount;
+              existing.invoiceCount += 1;
+            } else {
+              customersMap.set(inv.customerId, {
+                customer,
+                totalDebt: inv.remainingAmount,
+                invoiceCount: 1,
+              });
+            }
+          }
+        }
+      });
+
+    return Array.from(customersMap.values());
+  };
+
+  // تصفية الفواتير حسب البحث والعميل
+  const filteredInvoices = invoices.filter((invoice) => {
+    const matchesSearch =
+      searchTerm === "" ||
+      invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getCustomerName(invoice.customerId)
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+    const matchesCustomer =
+      filterCustomerId === "all" || invoice.customerId === filterCustomerId;
+
+    return matchesSearch && matchesCustomer;
+  });
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <POSHeader />
@@ -147,7 +283,7 @@ export default function Credit() {
                 <div>
                   <p className="text-sm text-muted-foreground">إجمالي الديون</p>
                   <p className="text-2xl font-bold">
-                    {getTotalCredit().toFixed(2)} ر.س
+                    {getTotalCredit().toFixed(2)} جنيه
                   </p>
                 </div>
                 <CreditCard className="h-8 w-8 text-primary" />
@@ -177,6 +313,100 @@ export default function Credit() {
             </Card>
           </div>
 
+          {/* قائمة العملاء الذين لديهم ديون */}
+          <Card className="mb-6">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <User className="h-5 w-5" />
+                العملاء الذين لديهم ديون
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {getCustomersWithDebts().map(
+                  ({ customer, totalDebt, invoiceCount }) => (
+                    <Card
+                      key={customer.id}
+                      className="p-4 hover:shadow-lg transition-shadow"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">
+                            {customer.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {customer.phone}
+                          </p>
+                        </div>
+                        <Badge variant="destructive">
+                          {invoiceCount}{" "}
+                          {invoiceCount === 1 ? "فاتورة" : "فواتير"}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">
+                            إجمالي الدين:
+                          </span>
+                          <span className="font-bold text-destructive">
+                            {totalDebt.toFixed(2)} جنيه
+                          </span>
+                        </div>
+                        {can("credit", "edit") && (
+                          <Button
+                            size="sm"
+                            onClick={() => openCustomerPaymentDialog(customer)}
+                            className="w-full"
+                          >
+                            تسديد من رصيد العميل
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  )
+                )}
+                {getCustomersWithDebts().length === 0 && (
+                  <div className="col-span-full text-center text-muted-foreground py-8">
+                    لا يوجد عملاء لديهم ديون
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* البحث والتصفية */}
+          <Card className="mb-6 p-4">
+            <div className="flex gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="ابحث برقم الفاتورة أو اسم العميل..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pr-10"
+                />
+              </div>
+              <Select
+                value={filterCustomerId}
+                onValueChange={setFilterCustomerId}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="تصفية حسب العميل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع العملاء</SelectItem>
+                  {customers
+                    .filter((c) =>
+                      invoices.some((inv) => inv.customerId === c.id)
+                    )
+                    .map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name} - {customer.phone}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </Card>
+
           <Card>
             <Table>
               <TableHeader>
@@ -193,7 +423,7 @@ export default function Credit() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((invoice) => {
+                {filteredInvoices.map((invoice) => {
                   const daysOverdue = getDaysOverdue(invoice.dueDate);
                   const isOverdue =
                     daysOverdue > 0 && invoice.remainingAmount > 0;
@@ -201,14 +431,14 @@ export default function Credit() {
                   return (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-medium">
-                        {invoice.id.slice(0, 8)}
+                        {invoice.id}
                       </TableCell>
                       <TableCell>
                         {getCustomerName(invoice.customerId)}
                       </TableCell>
                       <TableCell>
                         {new Date(invoice.createdAt).toLocaleDateString(
-                          "ar-SA"
+                          "ar-EG"
                         )}
                       </TableCell>
                       <TableCell>
@@ -219,7 +449,7 @@ export default function Credit() {
                             }
                           >
                             {new Date(invoice.dueDate).toLocaleDateString(
-                              "ar-SA"
+                              "ar-EG"
                             )}
                             {isOverdue && ` (متأخر ${daysOverdue} يوم)`}
                           </span>
@@ -227,10 +457,12 @@ export default function Credit() {
                           "غير محدد"
                         )}
                       </TableCell>
-                      <TableCell>{invoice.total.toFixed(2)} ر.س</TableCell>
-                      <TableCell>{invoice.paidAmount.toFixed(2)} ر.س</TableCell>
+                      <TableCell>{invoice.total.toFixed(2)} جنيه</TableCell>
+                      <TableCell>
+                        {invoice.paidAmount.toFixed(2)} جنيه
+                      </TableCell>
                       <TableCell className="text-destructive font-semibold">
-                        {invoice.remainingAmount.toFixed(2)} ر.س
+                        {invoice.remainingAmount.toFixed(2)} جنيه
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -267,13 +499,15 @@ export default function Credit() {
                     </TableRow>
                   );
                 })}
-                {invoices.length === 0 && (
+                {filteredInvoices.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={9}
                       className="text-center text-muted-foreground py-8"
                     >
-                      لا توجد فواتير آجلة
+                      {searchTerm || filterCustomerId !== "all"
+                        ? "لا توجد نتائج تطابق البحث"
+                        : "لا توجد فواتير آجلة"}
                     </TableCell>
                   </TableRow>
                 )}
@@ -287,7 +521,7 @@ export default function Credit() {
           >
             <DialogContent dir="rtl">
               <DialogHeader>
-                <DialogTitle>تسديد دفعة</DialogTitle>
+                <DialogTitle>تسديد دفعة من فاتورة محددة</DialogTitle>
               </DialogHeader>
               {selectedInvoice && (
                 <div className="space-y-4">
@@ -296,9 +530,7 @@ export default function Credit() {
                       <p className="text-sm text-muted-foreground">
                         رقم الفاتورة
                       </p>
-                      <p className="font-semibold">
-                        {selectedInvoice.id.slice(0, 8)}
-                      </p>
+                      <p className="font-semibold">{selectedInvoice.id}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">العميل</p>
@@ -311,7 +543,7 @@ export default function Credit() {
                         المبلغ المتبقي
                       </p>
                       <p className="font-semibold text-destructive">
-                        {selectedInvoice.remainingAmount.toFixed(2)} ر.س
+                        {selectedInvoice.remainingAmount.toFixed(2)} جنيه
                       </p>
                     </div>
                     <div>
@@ -319,7 +551,7 @@ export default function Credit() {
                         المبلغ المدفوع
                       </p>
                       <p className="font-semibold">
-                        {selectedInvoice.paidAmount.toFixed(2)} ر.س
+                        {selectedInvoice.paidAmount.toFixed(2)} جنيه
                       </p>
                     </div>
                   </div>
@@ -346,6 +578,102 @@ export default function Credit() {
                       إلغاء
                     </Button>
                     <Button onClick={handlePayment}>تسديد</Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog لدفع من رصيد العميل */}
+          <Dialog
+            open={isCustomerPaymentDialogOpen}
+            onOpenChange={setIsCustomerPaymentDialogOpen}
+          >
+            <DialogContent dir="rtl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  تسديد من رصيد العميل
+                </DialogTitle>
+              </DialogHeader>
+              {selectedCustomer && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-900 mb-2">
+                      معلومات العميل
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm">الاسم:</span>
+                        <span className="font-semibold">
+                          {selectedCustomer.name}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">الهاتف:</span>
+                        <span className="font-semibold">
+                          {selectedCustomer.phone}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">الرصيد المستحق:</span>
+                        <span className="font-semibold text-destructive">
+                          {selectedCustomer.currentBalance.toFixed(2)} جنيه
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                    <p className="text-amber-900">
+                      <strong>ملاحظة:</strong> سيتم توزيع المبلغ تلقائياً على
+                      جميع فواتير العميل بدءاً من الأقدم إلى الأحدث.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="customer-payment-amount">مبلغ الدفعة</Label>
+                    <Input
+                      id="customer-payment-amount"
+                      type="number"
+                      placeholder="أدخل المبلغ"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      min="0"
+                      max={selectedCustomer.currentBalance}
+                      step="0.01"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      الحد الأقصى: {selectedCustomer.currentBalance.toFixed(2)}{" "}
+                      جنيه
+                    </p>
+                  </div>
+
+                  {paymentAmount && parseFloat(paymentAmount) > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-sm text-green-900">
+                        المبلغ المتبقي بعد الدفع:{" "}
+                        <strong>
+                          {(
+                            selectedCustomer.currentBalance -
+                            parseFloat(paymentAmount)
+                          ).toFixed(2)}{" "}
+                          جنيه
+                        </strong>
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsCustomerPaymentDialogOpen(false)}
+                    >
+                      إلغاء
+                    </Button>
+                    <Button onClick={handleCustomerPayment}>
+                      تسديد من رصيد العميل
+                    </Button>
                   </div>
                 </div>
               )}

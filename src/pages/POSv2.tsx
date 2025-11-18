@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { POSHeader } from "@/components/POS/POSHeader";
+import { InvoicePrint } from "@/components/InvoicePrint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -16,6 +17,8 @@ import {
   Banknote,
   CreditCard,
   Wallet,
+  Tag,
+  Percent,
 } from "lucide-react";
 import {
   db,
@@ -27,6 +30,7 @@ import {
   PriceType,
   Unit,
   PaymentMethod,
+  Promotion,
 } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -95,6 +99,7 @@ const POSv2 = () => {
   const [priceTypes, setPriceTypes] = useState<PriceType[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -114,6 +119,16 @@ const POSv2 = () => {
   const [paidAmount, setPaidAmount] = useState<string>("");
   const [includeTax, setIncludeTax] = useState<boolean>(true);
 
+  // Multiple Payment Methods (Split Payment)
+  const [splitPaymentMode, setSplitPaymentMode] = useState<boolean>(false);
+  const [paymentSplits, setPaymentSplits] = useState<
+    Array<{ methodId: string; methodName: string; amount: string }>
+  >([]);
+
+  // Promotions Dialog
+  const [promotionDialogOpen, setPromotionDialogOpen] = useState(false);
+  const [selectedPromotion, setSelectedPromotion] = useState<string>("");
+
   // Installment
   const [installmentMonths, setInstallmentMonths] = useState<string>("3");
   const [downPayment, setDownPayment] = useState<string>("");
@@ -125,6 +140,10 @@ const POSv2 = () => {
     phone: "",
     address: "",
   });
+
+  // Print Invoice
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [invoiceToPrint, setInvoiceToPrint] = useState<Invoice | null>(null);
 
   const taxRate = parseFloat(getSetting("taxRate") || "14");
   const currency = getSetting("currency") || "EGP";
@@ -157,6 +176,7 @@ const POSv2 = () => {
       priceTypesData,
       unitsData,
       paymentMethodsData,
+      promotionsData,
     ] = await Promise.all([
       db.getAll<Product>("products"),
       db.getAll<ProductCategory>("productCategories"),
@@ -166,6 +186,7 @@ const POSv2 = () => {
       db.getAll<PriceType>("priceTypes"),
       db.getAll<Unit>("units"),
       db.getAll<PaymentMethod>("paymentMethods"),
+      db.getAll<Promotion>("promotions"),
     ]);
 
     setProducts(productsData);
@@ -196,6 +217,16 @@ const POSv2 = () => {
     if (defaultPaymentMethod) {
       setSelectedPaymentMethodId(defaultPaymentMethod.id);
     }
+
+    // Load active promotions
+    const today = new Date();
+    const activePromotions = promotionsData.filter((promo) => {
+      if (!promo.active) return false;
+      const startDate = new Date(promo.startDate);
+      const endDate = new Date(promo.endDate);
+      return today >= startDate && today <= endDate;
+    });
+    setPromotions(activePromotions);
 
     if (savedOrders) {
       setPendingOrders(JSON.parse(savedOrders));
@@ -325,6 +356,8 @@ const POSv2 = () => {
     setPaidAmount("");
     setSelectedCustomer("cash");
     setPaymentType("cash");
+    setSplitPaymentMode(false);
+    setPaymentSplits([]);
 
     // Reset to default price type
     const defaultPriceType =
@@ -356,8 +389,81 @@ const POSv2 = () => {
   const afterDiscount = subtotal - discount;
   const tax = includeTax ? (afterDiscount * taxRate) / 100 : 0;
   const total = afterDiscount + tax;
-  const paid = parseFloat(paidAmount) || 0;
+
+  // حساب المدفوع من الدفع المقسم أو المدفوع العادي
+  const paid = splitPaymentMode
+    ? paymentSplits.reduce(
+        (sum, split) => sum + (parseFloat(split.amount) || 0),
+        0
+      )
+    : parseFloat(paidAmount) || 0;
   const change = paid - total;
+
+  // إضافة طريقة دفع جديدة للدفع المقسم
+  const addPaymentSplit = () => {
+    const remainingAmount = total - paid;
+    const defaultMethod =
+      paymentMethods.find((pm) => pm.type === "cash") || paymentMethods[0];
+
+    if (defaultMethod) {
+      setPaymentSplits([
+        ...paymentSplits,
+        {
+          methodId: defaultMethod.id,
+          methodName: defaultMethod.name,
+          amount: remainingAmount > 0 ? remainingAmount.toFixed(2) : "0",
+        },
+      ]);
+    }
+  };
+
+  const updatePaymentSplit = (
+    index: number,
+    field: "methodId" | "amount",
+    value: string
+  ) => {
+    const updated = [...paymentSplits];
+    if (field === "methodId") {
+      const method = paymentMethods.find((pm) => pm.id === value);
+      if (method) {
+        updated[index].methodId = value;
+        updated[index].methodName = method.name;
+      }
+    } else {
+      updated[index].amount = value;
+    }
+    setPaymentSplits(updated);
+  };
+
+  const removePaymentSplit = (index: number) => {
+    setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
+  };
+
+  // Apply promotion
+  const applyPromotion = (promotionId: string) => {
+    const promotion = promotions.find((p) => p.id === promotionId);
+    if (!promotion) return;
+
+    if (promotion.discountType === "percentage") {
+      setDiscountPercent(promotion.discountValue.toString());
+      setDiscountAmount("");
+    } else {
+      setDiscountAmount(promotion.discountValue.toString());
+      setDiscountPercent("");
+    }
+
+    setSelectedPromotion(promotionId);
+    setPromotionDialogOpen(false);
+
+    toast({
+      title: "تم تطبيق العرض",
+      description: `${promotion.name} - ${
+        promotion.discountType === "percentage"
+          ? `${promotion.discountValue}%`
+          : `${promotion.discountValue} جنيه`
+      }`,
+    });
+  };
 
   // Suspend order
   const suspendOrder = () => {
@@ -437,15 +543,49 @@ const POSv2 = () => {
     try {
       const customerData = customers.find((c) => c.id === selectedCustomer);
 
-      // Use selected payment method or fallback to default (cash)
-      const paymentMethodId =
-        selectedPaymentMethodId ||
-        (paymentMethods.find((pm) => pm.type === "cash") || paymentMethods[0])
-          ?.id ||
-        "";
+      // الحصول على آخر رقم فاتورة وإنشاء رقم تسلسلي
+      const allInvoices = await db.getAll<Invoice>("invoices");
+      const lastInvoiceNumber =
+        allInvoices.length > 0
+          ? Math.max(
+              ...allInvoices.map((inv) => {
+                const num = parseInt(inv.id);
+                return isNaN(num) ? 0 : num;
+              })
+            )
+          : 0;
+      const newInvoiceNumber = (lastInvoiceNumber + 1).toString();
+
+      // تجهيز طرق الدفع والمبالغ
+      let paymentMethodIds: string[] = [];
+      let paymentMethodAmounts: Record<string, number> = {};
+
+      if (splitPaymentMode && paymentSplits.length > 0) {
+        // الدفع المقسم - استخدام طرق دفع متعددة
+        paymentSplits.forEach((split) => {
+          const amount = parseFloat(split.amount) || 0;
+          if (amount > 0) {
+            paymentMethodIds.push(split.methodId);
+            paymentMethodAmounts[split.methodId] = amount;
+          }
+        });
+      } else {
+        // طريقة دفع واحدة
+        const paymentMethodId =
+          selectedPaymentMethodId ||
+          (paymentMethods.find((pm) => pm.type === "cash") || paymentMethods[0])
+            ?.id ||
+          "";
+
+        // حفظ طريقة الدفع حتى لو كان المبلغ المدفوع صفر (للفواتير الآجلة)
+        if (paymentMethodId) {
+          paymentMethodIds = [paymentMethodId];
+          paymentMethodAmounts = { [paymentMethodId]: paid };
+        }
+      }
 
       const invoice: Invoice = {
-        id: Date.now().toString(),
+        id: newInvoiceNumber,
         customerId: selectedCustomer === "cash" ? undefined : selectedCustomer,
         customerName: customerData?.name,
         items: cartItems.map((i) => ({
@@ -466,8 +606,8 @@ const POSv2 = () => {
         paymentStatus: paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid",
         paidAmount: paid,
         remainingAmount: Math.max(0, total - paid),
-        paymentMethodIds: [paymentMethodId],
-        paymentMethodAmounts: { [paymentMethodId]: paid },
+        paymentMethodIds,
+        paymentMethodAmounts,
         userId: user.id,
         userName: user.name,
         createdAt: new Date().toISOString(),
@@ -518,42 +658,10 @@ const POSv2 = () => {
 
       toast({ title: "تم حفظ الفاتورة" });
 
-      // Thermal printing
-      const autoPrint = localStorage.getItem("autoPrint") === "true";
-      const selectedPrinter = localStorage.getItem("selectedPrinter");
-
-      if ((print || autoPrint) && selectedPrinter) {
-        try {
-          const receiptHtml = InvoiceReceiptGenerator.generate(invoice, {
-            storeName: localStorage.getItem("storeName") || "MASR POS Pro",
-            storeAddress: localStorage.getItem("storeAddress") || "",
-            storePhone: localStorage.getItem("storePhone") || "",
-            storeTaxNumber: localStorage.getItem("storeTaxNumber") || "",
-            headerText: localStorage.getItem("receiptHeaderText") || "",
-            footerText:
-              localStorage.getItem("receiptFooterText") || "شكراً لزيارتكم",
-            logoUrl: localStorage.getItem("receiptLogoUrl"),
-          });
-
-          const paperWidth = parseInt(
-            localStorage.getItem("paperWidth") || "80"
-          );
-          const copies = parseInt(localStorage.getItem("printCopies") || "1");
-
-          await thermalPrinter.print(receiptHtml, {
-            paperWidth,
-            copies,
-          });
-
-          toast({ title: "تم الطباعة بنجاح", variant: "default" });
-        } catch (error) {
-          console.error("Print error:", error);
-          toast({
-            title: "خطأ في الطباعة",
-            variant: "destructive",
-            description: "تم حفظ الفاتورة بنجاح لكن فشلت عملية الطباعة",
-          });
-        }
+      // فتح نافذة الطباعة إذا طُلب ذلك
+      if (print) {
+        setInvoiceToPrint(invoice);
+        setPrintDialogOpen(true);
       }
 
       clearCart();
@@ -1016,89 +1124,258 @@ const POSv2 = () => {
                         </div>
 
                         {/* Payment Method Selection */}
-                        <div>
-                          <Label className="text-xs">طريقة الدفع</Label>
-                          <Select
-                            value={selectedPaymentMethodId}
-                            onValueChange={setSelectedPaymentMethodId}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue>
-                                {(() => {
-                                  const selected = paymentMethods.find(
-                                    (pm) => pm.id === selectedPaymentMethodId
-                                  );
-                                  if (!selected) return "اختر طريقة الدفع";
-                                  return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">طريقة الدفع</Label>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={splitPaymentMode}
+                                onCheckedChange={(checked) => {
+                                  setSplitPaymentMode(checked);
+                                  if (checked) {
+                                    // تفعيل الدفع المقسم - إضافة طريقة دفع واحدة افتراضياً
+                                    const defaultMethod =
+                                      paymentMethods.find(
+                                        (pm) => pm.type === "cash"
+                                      ) || paymentMethods[0];
+                                    if (
+                                      defaultMethod &&
+                                      paymentSplits.length === 0
+                                    ) {
+                                      setPaymentSplits([
+                                        {
+                                          methodId: defaultMethod.id,
+                                          methodName: defaultMethod.name,
+                                          amount:
+                                            total > 0 ? total.toFixed(2) : "0",
+                                        },
+                                      ]);
+                                    }
+                                  } else {
+                                    // إلغاء الدفع المقسم
+                                    setPaymentSplits([]);
+                                  }
+                                }}
+                              />
+                              <span className="text-[10px] text-muted-foreground">
+                                دفع بطرق متعددة
+                              </span>
+                            </div>
+                          </div>
+
+                          {!splitPaymentMode ? (
+                            // طريقة دفع واحدة فقط
+                            <Select
+                              value={selectedPaymentMethodId}
+                              onValueChange={setSelectedPaymentMethodId}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue>
+                                  {(() => {
+                                    const selected = paymentMethods.find(
+                                      (pm) => pm.id === selectedPaymentMethodId
+                                    );
+                                    if (!selected) return "اختر طريقة الدفع";
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        {selected.type === "cash" && (
+                                          <Banknote className="h-4 w-4" />
+                                        )}
+                                        {selected.type === "wallet" && (
+                                          <Wallet className="h-4 w-4" />
+                                        )}
+                                        {selected.type === "visa" && (
+                                          <CreditCard className="h-4 w-4" />
+                                        )}
+                                        {selected.type === "bank_transfer" && (
+                                          <CreditCard className="h-4 w-4" />
+                                        )}
+                                        <span>{selected.name}</span>
+                                      </div>
+                                    );
+                                  })()}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {paymentMethods.map((pm) => (
+                                  <SelectItem key={pm.id} value={pm.id}>
                                     <div className="flex items-center gap-2">
-                                      {selected.type === "cash" && (
+                                      {pm.type === "cash" && (
                                         <Banknote className="h-4 w-4" />
                                       )}
-                                      {selected.type === "wallet" && (
+                                      {pm.type === "wallet" && (
                                         <Wallet className="h-4 w-4" />
                                       )}
-                                      {selected.type === "visa" && (
+                                      {pm.type === "visa" && (
                                         <CreditCard className="h-4 w-4" />
                                       )}
-                                      {selected.type === "bank_transfer" && (
+                                      {pm.type === "bank_transfer" && (
                                         <CreditCard className="h-4 w-4" />
                                       )}
-                                      <span>{selected.name}</span>
+                                      <span>{pm.name}</span>
                                     </div>
-                                  );
-                                })()}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {paymentMethods.map((pm) => (
-                                <SelectItem key={pm.id} value={pm.id}>
-                                  <div className="flex items-center gap-2">
-                                    {pm.type === "cash" && (
-                                      <Banknote className="h-4 w-4" />
-                                    )}
-                                    {pm.type === "wallet" && (
-                                      <Wallet className="h-4 w-4" />
-                                    )}
-                                    {pm.type === "visa" && (
-                                      <CreditCard className="h-4 w-4" />
-                                    )}
-                                    {pm.type === "bank_transfer" && (
-                                      <CreditCard className="h-4 w-4" />
-                                    )}
-                                    <span>{pm.name}</span>
-                                  </div>
-                                </SelectItem>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            // طرق دفع متعددة (Split Payment)
+                            <div className="space-y-2 border rounded-md p-2 bg-muted/30">
+                              {paymentSplits.map((split, index) => (
+                                <div
+                                  key={index}
+                                  className="flex gap-2 items-start"
+                                >
+                                  <Select
+                                    value={split.methodId}
+                                    onValueChange={(value) =>
+                                      updatePaymentSplit(
+                                        index,
+                                        "methodId",
+                                        value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 flex-1">
+                                      <SelectValue>
+                                        {
+                                          paymentMethods.find(
+                                            (pm) => pm.id === split.methodId
+                                          )?.name
+                                        }
+                                      </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {paymentMethods.map((pm) => (
+                                        <SelectItem key={pm.id} value={pm.id}>
+                                          <div className="flex items-center gap-2">
+                                            {pm.type === "cash" && (
+                                              <Banknote className="h-4 w-4" />
+                                            )}
+                                            {pm.type === "wallet" && (
+                                              <Wallet className="h-4 w-4" />
+                                            )}
+                                            {pm.type === "visa" && (
+                                              <CreditCard className="h-4 w-4" />
+                                            )}
+                                            {pm.type === "bank_transfer" && (
+                                              <CreditCard className="h-4 w-4" />
+                                            )}
+                                            <span>{pm.name}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="number"
+                                    value={split.amount}
+                                    onChange={(e) =>
+                                      updatePaymentSplit(
+                                        index,
+                                        "amount",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="h-9 w-24"
+                                    placeholder="المبلغ"
+                                  />
+                                  {paymentSplits.length > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => removePaymentSplit(index)}
+                                      className="h-9 w-9 p-0"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  )}
+                                </div>
                               ))}
-                            </SelectContent>
-                          </Select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={addPaymentSplit}
+                                className="w-full h-8"
+                              >
+                                <Plus className="h-3 w-3 ml-1" />
+                                إضافة طريقة دفع
+                              </Button>
+                              {paymentSplits.length > 0 && (
+                                <div className="text-[10px] text-center pt-1 border-t">
+                                  <span
+                                    className={
+                                      paid >= total
+                                        ? "text-green-600 font-bold"
+                                        : "text-amber-600"
+                                    }
+                                  >
+                                    المجموع: {paid.toFixed(2)} من{" "}
+                                    {total.toFixed(2)} {currency}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Discount & Tax */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">خصم %</Label>
-                            <Input
-                              type="number"
-                              value={discountPercent}
-                              onChange={(e) => {
-                                setDiscountPercent(e.target.value);
-                                setDiscountAmount("");
-                              }}
-                              className="h-9"
-                            />
+                        <div className="space-y-2">
+                          {/* Promotions Button */}
+                          {promotions.length > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPromotionDialogOpen(true)}
+                              className="w-full h-8 gap-2"
+                            >
+                              <Tag className="h-3 w-3" />
+                              تطبيق عرض ({promotions.length})
+                            </Button>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs">خصم %</Label>
+                              <Input
+                                type="number"
+                                value={discountPercent}
+                                onChange={(e) => {
+                                  setDiscountPercent(e.target.value);
+                                  setDiscountAmount("");
+                                  setSelectedPromotion("");
+                                }}
+                                className="h-9"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">خصم مبلغ</Label>
+                              <Input
+                                type="number"
+                                value={discountAmount}
+                                onChange={(e) => {
+                                  setDiscountAmount(e.target.value);
+                                  setDiscountPercent("");
+                                  setSelectedPromotion("");
+                                }}
+                                className="h-9"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <Label className="text-xs">خصم مبلغ</Label>
-                            <Input
-                              type="number"
-                              value={discountAmount}
-                              onChange={(e) => {
-                                setDiscountAmount(e.target.value);
-                                setDiscountPercent("");
-                              }}
-                              className="h-9"
-                            />
-                          </div>
+
+                          {selectedPromotion && (
+                            <div className="bg-green-50 border border-green-200 rounded px-2 py-1 text-xs text-green-900 flex items-center gap-1">
+                              <Tag className="h-3 w-3" />
+                              <span>
+                                تم تطبيق:{" "}
+                                {
+                                  promotions.find(
+                                    (p) => p.id === selectedPromotion
+                                  )?.name
+                                }
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -1139,17 +1416,19 @@ const POSv2 = () => {
                           </div>
                         </div>
 
-                        {/* Paid Amount */}
-                        <div>
-                          <Label className="text-xs">المدفوع</Label>
-                          <Input
-                            type="number"
-                            value={paidAmount}
-                            onChange={(e) => setPaidAmount(e.target.value)}
-                            placeholder={total.toFixed(2)}
-                            className="h-10 text-lg font-bold"
-                          />
-                        </div>
+                        {/* Paid Amount - Only show if not in split payment mode */}
+                        {!splitPaymentMode && (
+                          <div>
+                            <Label className="text-xs">المدفوع</Label>
+                            <Input
+                              type="number"
+                              value={paidAmount}
+                              onChange={(e) => setPaidAmount(e.target.value)}
+                              placeholder={total.toFixed(2)}
+                              className="h-10 text-lg font-bold"
+                            />
+                          </div>
+                        )}
 
                         {paid > 0 && (
                           <div
@@ -1261,6 +1540,96 @@ const POSv2 = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Promotions Dialog */}
+      <Dialog open={promotionDialogOpen} onOpenChange={setPromotionDialogOpen}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-green-600" />
+              العروض والخصومات المتاحة
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-[400px] overflow-y-auto py-2">
+            {promotions.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                لا توجد عروض متاحة حالياً
+              </div>
+            ) : (
+              promotions.map((promo) => (
+                <Card
+                  key={promo.id}
+                  className={`p-4 cursor-pointer hover:border-green-500 transition-all ${
+                    selectedPromotion === promo.id
+                      ? "border-green-500 bg-green-50"
+                      : ""
+                  }`}
+                  onClick={() => applyPromotion(promo.id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-lg">{promo.name}</h3>
+                        <Badge variant="secondary" className="gap-1">
+                          {promo.discountType === "percentage" ? (
+                            <>
+                              <Percent className="h-3 w-3" />
+                              {promo.discountValue}%
+                            </>
+                          ) : (
+                            <>{promo.discountValue} جنيه</>
+                          )}
+                        </Badge>
+                      </div>
+                      {promo.description && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {promo.description}
+                        </p>
+                      )}
+                      <div className="flex gap-3 text-xs text-muted-foreground">
+                        <span>
+                          من:{" "}
+                          {new Date(promo.startDate).toLocaleDateString(
+                            "ar-EG"
+                          )}
+                        </span>
+                        <span>
+                          إلى:{" "}
+                          {new Date(promo.endDate).toLocaleDateString("ar-EG")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-full">
+                      <Tag className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPromotionDialogOpen(false)}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Print Dialog */}
+      {printDialogOpen && invoiceToPrint && (
+        <InvoicePrint
+          invoice={invoiceToPrint}
+          onClose={() => {
+            setPrintDialogOpen(false);
+            setInvoiceToPrint(null);
+          }}
+        />
+      )}
     </div>
   );
 };

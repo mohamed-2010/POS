@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,7 @@ import {
   Wallet,
   Eye,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   db,
@@ -53,14 +55,17 @@ import {
   ExpenseItem,
   PaymentMethod,
   PriceType,
+  ProductCategory,
 } from "@/lib/indexedDB";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const Reports = () => {
   const { can } = useAuth();
   const { getSetting } = useSettingsContext();
   const currency = getSetting("currency") || "EGP";
+  const { toast } = useToast();
 
   // States
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -76,6 +81,7 @@ const Reports = () => {
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [priceTypes, setPriceTypes] = useState<PriceType[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
 
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
@@ -117,6 +123,7 @@ const Reports = () => {
       expItems,
       pms,
       pts,
+      cats,
     ] = await Promise.all([
       db.getAll<Invoice>("invoices"),
       db.getAll<Customer>("customers"),
@@ -131,6 +138,7 @@ const Reports = () => {
       db.getAll<ExpenseItem>("expenseItems"),
       db.getAll<PaymentMethod>("paymentMethods"),
       db.getAll<PriceType>("priceTypes"),
+      db.getAll<ProductCategory>("productCategories"),
     ]);
     setInvoices(inv);
     setCustomers(cust);
@@ -145,6 +153,7 @@ const Reports = () => {
     setExpenseItems(expItems);
     setPaymentMethods(pms);
     setPriceTypes(pts);
+    setCategories(cats);
   };
 
   // Helpers
@@ -320,13 +329,18 @@ const Reports = () => {
     (a, b) => b.revenue - a.revenue
   );
 
-  // إحصائيات حسب طرق الدفع (الجديدة)
+  // إحصائيات حسب طرق الدفع (تدعم الفواتير القديمة والجديدة)
   const paymentMethodSalesMap = new Map<
     string,
     { name: string; count: number; amount: number }
   >();
   filteredInvoices.forEach((inv) => {
-    if (inv.paymentMethodIds && inv.paymentMethodAmounts) {
+    // دعم النظام الجديد (split payments)
+    if (
+      inv.paymentMethodIds &&
+      inv.paymentMethodIds.length > 0 &&
+      inv.paymentMethodAmounts
+    ) {
       inv.paymentMethodIds.forEach((pmId) => {
         const amount = inv.paymentMethodAmounts[pmId] || 0;
         const paymentMethod = paymentMethods.find((pm) => pm.id === pmId);
@@ -342,6 +356,28 @@ const Reports = () => {
         });
       });
     }
+    // إذا لم يكن هناك paymentMethodIds، نحسبها حسب paymentType
+    else {
+      const typeKey = inv.paymentType || "unknown";
+      const typeName =
+        typeKey === "cash"
+          ? "نقدي"
+          : typeKey === "credit"
+          ? "آجل"
+          : typeKey === "installment"
+          ? "تقسيط"
+          : "غير محدد";
+      const existing = paymentMethodSalesMap.get(typeKey) || {
+        name: typeName,
+        count: 0,
+        amount: 0,
+      };
+      paymentMethodSalesMap.set(typeKey, {
+        name: existing.name,
+        count: existing.count + 1,
+        amount: existing.amount + inv.total,
+      });
+    }
   });
   const paymentMethodStats = Array.from(paymentMethodSalesMap.values()).sort(
     (a, b) => b.amount - a.amount
@@ -352,6 +388,304 @@ const Reports = () => {
     (sum, prod) => sum + prod.stock * prod.price,
     0
   );
+
+  // دالة تصدير البيانات إلى Excel محسّنة
+  const exportToExcel = () => {
+    try {
+      // تجهيز البيانات بشكل منظم
+      const worksheetData: any[] = [];
+
+      // ============ القسم الأول: معلومات التقرير ============
+      worksheetData.push(["تقرير مبيعات شامل"]);
+      worksheetData.push([
+        `الفترة: من ${formatDate(startDate)} إلى ${formatDate(endDate)}`,
+      ]);
+      worksheetData.push([
+        `تاريخ التصدير: ${new Date().toLocaleString("ar-EG")}`,
+      ]);
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم الثاني: الملخص المالي ============
+      worksheetData.push(["═══════════════ الملخص المالي ═══════════════"]);
+      worksheetData.push(["البند", "المبلغ", "العملة"]);
+      worksheetData.push(["إجمالي المبيعات", totalSales.toFixed(2), currency]);
+      worksheetData.push([
+        "مرتجعات المبيعات",
+        `-${totalSalesReturns.toFixed(2)}`,
+        currency,
+      ]);
+      worksheetData.push(["صافي المبيعات", netSales.toFixed(2), currency]);
+      worksheetData.push([
+        "إجمالي المصروفات",
+        `-${(totalExpenses + totalExpenseItems).toFixed(2)}`,
+        currency,
+      ]);
+      worksheetData.push(["صافي الربح", netProfit.toFixed(2), currency]);
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم الثالث: المبيعات حسب طريقة الدفع ============
+      worksheetData.push([
+        "═══════════════ المبيعات حسب طريقة الدفع ═══════════════",
+      ]);
+      worksheetData.push([
+        "طريقة الدفع",
+        "عدد المعاملات",
+        "إجمالي المبلغ",
+        "متوسط المعاملة",
+        "النسبة %",
+      ]);
+
+      paymentMethodStats.forEach((pm) => {
+        const avgTransaction = pm.count > 0 ? pm.amount / pm.count : 0;
+        const percentage = totalSales > 0 ? (pm.amount / totalSales) * 100 : 0;
+        worksheetData.push([
+          pm.name,
+          pm.count,
+          pm.amount.toFixed(2),
+          avgTransaction.toFixed(2),
+          `${percentage.toFixed(1)}%`,
+        ]);
+      });
+
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم الرابع: أعلى 10 منتجات مبيعاً ============
+      worksheetData.push([
+        "═══════════════ أعلى 10 منتجات مبيعاً ═══════════════",
+      ]);
+      worksheetData.push([
+        "الترتيب",
+        "المنتج",
+        "الكمية المباعة",
+        "إجمالي المبيعات",
+        "متوسط السعر",
+      ]);
+
+      topProducts.forEach((product, index) => {
+        const avgPrice =
+          product.quantity > 0 ? product.total / product.quantity : 0;
+        worksheetData.push([
+          index + 1,
+          product.name,
+          product.quantity,
+          product.total.toFixed(2),
+          avgPrice.toFixed(2),
+        ]);
+      });
+
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم الخامس: أفضل 10 عملاء ============
+      worksheetData.push(["═══════════════ أفضل 10 عملاء ═══════════════"]);
+      worksheetData.push([
+        "الترتيب",
+        "اسم العميل",
+        "عدد الفواتير",
+        "إجمالي المشتريات",
+        "متوسط الفاتورة",
+      ]);
+
+      topCustomers.forEach((customer, index) => {
+        const avgInvoice =
+          customer.count > 0 ? customer.total / customer.count : 0;
+        worksheetData.push([
+          index + 1,
+          customer.name,
+          customer.count,
+          customer.total.toFixed(2),
+          avgInvoice.toFixed(2),
+        ]);
+      });
+
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم السادس: تفاصيل الفواتير ============
+      worksheetData.push([
+        "═══════════════ تفاصيل جميع الفواتير ═══════════════",
+      ]);
+      worksheetData.push([
+        "رقم الفاتورة",
+        "التاريخ",
+        "الوقت",
+        "اسم العميل",
+        "الموظف",
+        "عدد الأصناف",
+        "المجموع الفرعي",
+        "الضريبة",
+        "الإجمالي",
+        "المدفوع",
+        "المتبقي",
+        "نوع الدفع",
+        "حالة الدفع",
+      ]);
+
+      filteredInvoices.forEach((inv) => {
+        const dateObj = new Date(inv.createdAt);
+        const date = dateObj.toLocaleDateString("ar-EG");
+        const time = dateObj.toLocaleTimeString("ar-EG");
+        const paymentStatusText =
+          inv.paymentStatus === "paid"
+            ? "مدفوعة"
+            : inv.paymentStatus === "partial"
+            ? "مدفوعة جزئياً"
+            : "غير مدفوعة";
+
+        worksheetData.push([
+          inv.id,
+          date,
+          time,
+          inv.customerName || "زبون عادي",
+          inv.userName || "-",
+          inv.items.length,
+          inv.subtotal.toFixed(2),
+          inv.tax.toFixed(2),
+          inv.total.toFixed(2),
+          inv.paidAmount.toFixed(2),
+          inv.remainingAmount.toFixed(2),
+          inv.paymentType === "cash"
+            ? "نقدي"
+            : inv.paymentType === "credit"
+            ? "آجل"
+            : inv.paymentType === "installment"
+            ? "تقسيط"
+            : "-",
+          paymentStatusText,
+        ]);
+      });
+
+      worksheetData.push([]); // سطر فارغ
+
+      // ============ القسم السابع: ملخص إحصائي ============
+      worksheetData.push(["═══════════════ ملخص إحصائي ═══════════════"]);
+      worksheetData.push(["المؤشر", "القيمة"]);
+      worksheetData.push(["إجمالي عدد الفواتير", filteredInvoices.length]);
+      worksheetData.push([
+        "متوسط قيمة الفاتورة",
+        (totalSales / Math.max(filteredInvoices.length, 1)).toFixed(2),
+      ]);
+      worksheetData.push([
+        "عدد العملاء الفريدين",
+        new Set(filteredInvoices.map((i) => i.customerId).filter(Boolean)).size,
+      ]);
+      worksheetData.push([
+        "عدد المنتجات المباعة",
+        filteredInvoices.reduce((sum, inv) => sum + inv.items.length, 0),
+      ]);
+      worksheetData.push([
+        "إجمالي الكميات المباعة",
+        filteredInvoices.reduce(
+          (sum, inv) => sum + inv.items.reduce((s, i) => s + i.quantity, 0),
+          0
+        ),
+      ]);
+
+      // تحويل البيانات إلى HTML Table (يعمل بشكل ممتاز مع Excel)
+      let htmlContent = `
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; direction: rtl; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+    th { background-color: #4CAF50; color: white; font-weight: bold; }
+    tr:nth-child(even) { background-color: #f2f2f2; }
+    .section-header { background-color: #2196F3; color: white; font-weight: bold; text-align: center; }
+    .title { font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; }
+    .subtitle { font-size: 14px; text-align: center; color: #666; margin: 10px 0; }
+    .summary { background-color: #fff3cd; }
+    .total { background-color: #d4edda; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="title">تقرير مبيعات شامل</div>
+  <div class="subtitle">الفترة: من ${formatDate(startDate)} إلى ${formatDate(
+        endDate
+      )}</div>
+  <div class="subtitle">تاريخ التصدير: ${new Date().toLocaleString(
+    "ar-EG"
+  )}</div>
+  
+  <table>
+`;
+
+      let currentSection = "";
+      let isFirstRowInSection = true;
+
+      worksheetData.forEach((row, index) => {
+        if (row.length === 0) {
+          // سطر فارغ - أغلق الجدول السابق وابدأ جديد
+          if (currentSection) {
+            htmlContent += `  </table>\n  <table>\n`;
+          }
+          isFirstRowInSection = true;
+          return;
+        }
+
+        // تحقق إذا كان هذا عنوان قسم
+        const firstCell = String(row[0]);
+        if (firstCell.includes("═══")) {
+          currentSection = firstCell.replace(/═/g, "").trim();
+          htmlContent += `    <tr><th colspan="${row.length}" class="section-header">${currentSection}</th></tr>\n`;
+          isFirstRowInSection = true;
+          return;
+        }
+
+        // Header row (إذا كان أول صف بعد عنوان القسم)
+        if (isFirstRowInSection && row.length > 1) {
+          htmlContent += `    <tr>`;
+          row.forEach((cell) => {
+            htmlContent += `<th>${String(cell ?? "")}</th>`;
+          });
+          htmlContent += `</tr>\n`;
+          isFirstRowInSection = false;
+        } else {
+          // Data row
+          htmlContent += `    <tr>`;
+          row.forEach((cell) => {
+            htmlContent += `<td>${String(cell ?? "")}</td>`;
+          });
+          htmlContent += `</tr>\n`;
+        }
+      });
+
+      htmlContent += `  </table>
+</body>
+</html>`;
+
+      // إنشاء Blob بصيغة HTML (Excel سيفتحه كـ xlsx)
+      const BOM = "\uFEFF";
+      const blob = new Blob([BOM + htmlContent], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;",
+      });
+
+      // تنزيل الملف
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      const filename = `تقرير_مبيعات_${startDate}_إلى_${endDate}.xlsx`;
+
+      link.setAttribute("href", url);
+      link.setAttribute("download", filename);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "✅ تم التصدير بنجاح",
+        description: `تم تصدير التقرير إلى ملف: ${filename}`,
+      });
+    } catch (error) {
+      console.error("خطأ في التصدير:", error);
+      toast({
+        title: "❌ خطأ في التصدير",
+        description: "حدث خطأ أثناء تصدير التقرير",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -375,7 +709,7 @@ const Reports = () => {
               التقارير والإحصائيات
             </h1>
             {can("reports", "export") && (
-              <Button>
+              <Button onClick={exportToExcel}>
                 <Download className="ml-2 h-4 w-4" />
                 تصدير Excel
               </Button>
@@ -965,6 +1299,144 @@ const Reports = () => {
 
             {/* ==================== تقارير المخزون ==================== */}
             <TabsContent value="inventory" className="space-y-4">
+              {/* المنتجات القريبة من النفاذ */}
+              <Card>
+                <CardHeader className="bg-amber-50 dark:bg-amber-950/20">
+                  <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-5 w-5" />
+                    تحذير: منتجات قريبة من النفاذ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {products.filter(
+                    (p) => p.stock <= (p.minStock || 10) && p.stock > 0
+                  ).length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      لا توجد منتجات قريبة من النفاذ 🎉
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-lg p-4">
+                        <p className="font-semibold text-amber-900 dark:text-amber-200">
+                          عدد المنتجات التي تحتاج إعادة طلب:{" "}
+                          <span className="text-2xl">
+                            {
+                              products.filter(
+                                (p) =>
+                                  p.stock <= (p.minStock || 10) && p.stock > 0
+                              ).length
+                            }
+                          </span>
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
+                          هذه المنتجات وصلت أو قاربت الحد الأدنى من المخزون
+                        </p>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>اسم المنتج</TableHead>
+                            <TableHead>الفئة</TableHead>
+                            <TableHead className="text-center">
+                              المخزون الحالي
+                            </TableHead>
+                            <TableHead className="text-center">
+                              الحد الأدنى
+                            </TableHead>
+                            <TableHead className="text-center">
+                              المطلوب
+                            </TableHead>
+                            <TableHead>الحالة</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {products
+                            .filter(
+                              (p) =>
+                                p.stock <= (p.minStock || 10) && p.stock > 0
+                            )
+                            .sort((a, b) => a.stock - b.stock) // ترتيب من الأقل مخزوناً
+                            .map((product) => {
+                              const minStock = product.minStock || 10;
+                              const needed = Math.max(
+                                0,
+                                minStock - product.stock
+                              );
+                              const percentage =
+                                (product.stock / minStock) * 100;
+                              const categoryName =
+                                categories.find(
+                                  (c) => c.id === product.category
+                                )?.name || "غير محدد";
+
+                              return (
+                                <TableRow
+                                  key={product.id}
+                                  className="hover:bg-amber-50/50 dark:hover:bg-amber-950/10"
+                                >
+                                  <TableCell className="font-medium">
+                                    {product.name || product.nameAr}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">
+                                      {categoryName}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span
+                                      className={`font-bold ${
+                                        product.stock < minStock * 0.3
+                                          ? "text-red-600"
+                                          : product.stock < minStock * 0.5
+                                          ? "text-orange-600"
+                                          : "text-amber-600"
+                                      }`}
+                                    >
+                                      {product.stock}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center text-muted-foreground">
+                                    {minStock}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className="font-semibold text-blue-600">
+                                      +{needed}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 bg-muted rounded-full h-2 max-w-[100px]">
+                                        <div
+                                          className={`h-2 rounded-full ${
+                                            percentage < 30
+                                              ? "bg-red-500"
+                                              : percentage < 50
+                                              ? "bg-orange-500"
+                                              : "bg-amber-500"
+                                          }`}
+                                          style={{
+                                            width: `${Math.min(
+                                              percentage,
+                                              100
+                                            )}%`,
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="text-xs font-medium w-12">
+                                        {percentage.toFixed(0)}%
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* إجمالي المخزون */}
               <Card>
                 <CardHeader>

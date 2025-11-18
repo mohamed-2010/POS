@@ -18,6 +18,7 @@ import {
   User,
   EmployeeAdvance,
   EmployeeDeduction,
+  Role,
 } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,6 +94,7 @@ const Employees = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [advances, setAdvances] = useState<EmployeeAdvance[]>([]);
   const [deductions, setDeductions] = useState<EmployeeDeduction[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -108,7 +110,7 @@ const Employees = () => {
     deductions: 0, // الخصومات الشهرية الثابتة
     hireDate: "",
     active: true,
-    role: "cashier" as "admin" | "manager" | "cashier" | "accountant",
+    role: "", // roleId from roles table
     notes: "",
     username: "",
     password: "",
@@ -119,11 +121,13 @@ const Employees = () => {
   }, []);
 
   const loadEmployees = async () => {
-    const [employeesData, advancesData, deductionsData] = await Promise.all([
-      db.getAll<Employee>("employees"),
-      db.getAll<EmployeeAdvance>("employeeAdvances"),
-      db.getAll<EmployeeDeduction>("employeeDeductions"),
-    ]);
+    const [employeesData, advancesData, deductionsData, rolesData] =
+      await Promise.all([
+        db.getAll<Employee>("employees"),
+        db.getAll<EmployeeAdvance>("employeeAdvances"),
+        db.getAll<EmployeeDeduction>("employeeDeductions"),
+        db.getAll<Role>("roles"),
+      ]);
 
     // معالجة الخصومات لمرة واحدة تلقائياً
     await processOneTimeDeductions(deductionsData);
@@ -137,10 +141,12 @@ const Employees = () => {
     console.log("Loaded advances:", advancesData.length);
     console.log("Loaded deductions:", updatedDeductions.length);
     console.log("All deductions:", updatedDeductions);
+    console.log("Loaded roles:", rolesData.length);
 
     setEmployees(employeesData);
     setAdvances(advancesData);
     setDeductions(updatedDeductions);
+    setRoles(rolesData);
   };
 
   const { getSetting } = useSettingsContext();
@@ -153,6 +159,7 @@ const Employees = () => {
       const employee: Employee = {
         id: editingEmployee?.id || Date.now().toString(),
         ...formData,
+        roleId: formData.role, // Save roleId
       };
 
       if (editingEmployee) {
@@ -167,6 +174,7 @@ const Employees = () => {
 
         if (userToUpdate) {
           userToUpdate.role = formData.role;
+          userToUpdate.roleId = formData.role; // Save roleId for custom roles
           userToUpdate.name = formData.name;
           if (formData.password) {
             userToUpdate.password = formData.password;
@@ -209,6 +217,7 @@ const Employees = () => {
           password: formData.password,
           name: formData.name,
           role: formData.role,
+          roleId: formData.role, // Save roleId for custom roles
           active: formData.active,
         };
 
@@ -277,7 +286,7 @@ const Employees = () => {
       deductions: employee.deductions || 0,
       hireDate: employee.hireDate,
       active: employee.active,
-      role: employee.role || "cashier",
+      role: employee.roleId || employee.role || "", // Use roleId first, fallback to old role
       notes: employee.notes || "",
       username: user?.username || "",
       password: "", // دائماً فارغة عند التعديل
@@ -294,6 +303,9 @@ const Employees = () => {
   };
 
   const resetForm = () => {
+    // الحصول على الدور الافتراضي
+    const defaultRole = roles.find((r) => r.isDefault);
+
     setFormData({
       name: "",
       phone: "",
@@ -304,7 +316,7 @@ const Employees = () => {
       deductions: 0,
       hireDate: "",
       active: true,
-      role: "cashier",
+      role: defaultRole?.id || "",
       notes: "",
       username: "",
       password: "",
@@ -431,12 +443,27 @@ const Employees = () => {
                           </>
                         )}
                       </Badge>
-                      {employee.role && (
+                      {(employee.role || employee.roleId) && (
                         <Badge variant="outline">
-                          {employee.role === "admin" && "مدير نظام"}
-                          {employee.role === "manager" && "مدير"}
-                          {employee.role === "cashier" && "كاشير"}
-                          {employee.role === "accountant" && "محاسب"}
+                          {(() => {
+                            // إذا كان هناك roleId، ابحث عن الدور
+                            if (employee.roleId) {
+                              const role = roles.find(
+                                (r) => r.id === employee.roleId
+                              );
+                              return role ? role.name : "غير محدد";
+                            }
+                            // Fallback للأدوار القديمة
+                            if (employee.role === "admin") return "مدير نظام";
+                            if (employee.role === "manager") return "مدير";
+                            if (employee.role === "cashier") return "كاشير";
+                            if (employee.role === "accountant") return "محاسب";
+                            // إذا كان roleId محفوظ في role (الحالة الحالية)
+                            const role = roles.find(
+                              (r) => r.id === employee.role
+                            );
+                            return role ? role.name : employee.role;
+                          })()}
                         </Badge>
                       )}
                     </div>
@@ -707,42 +734,61 @@ const Employees = () => {
                       <Label>الدور الوظيفي (الصلاحيات) *</Label>
                       <Select
                         value={formData.role}
-                        onValueChange={(
-                          value: "admin" | "manager" | "cashier" | "accountant"
-                        ) => setFormData({ ...formData, role: value })}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, role: value })
+                        }
+                        required
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="اختر الدور الوظيفي" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="admin">
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-red-500">Admin</Badge>
-                              <span>مدير النظام - كل الصلاحيات</span>
+                          {roles.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground text-center">
+                              لا توجد أدوار. يرجى إضافة أدوار من صفحة الصلاحيات
                             </div>
-                          </SelectItem>
-                          <SelectItem value="manager">
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-blue-500">Manager</Badge>
-                              <span>مدير - صلاحيات إدارية</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="cashier">
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-green-500">Cashier</Badge>
-                              <span>كاشير - صلاحيات البيع</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="accountant">
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-purple-500">
-                                Accountant
-                              </Badge>
-                              <span>محاسب - التقارير المالية</span>
-                            </div>
-                          </SelectItem>
+                          ) : (
+                            roles.map((role) => (
+                              <SelectItem key={role.id} value={role.id}>
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`w-3 h-3 rounded-full ${role.color}`}
+                                  />
+                                  <span className="font-medium">
+                                    {role.name}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    ({role.nameEn})
+                                  </span>
+                                  {role.isDefault && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      افتراضي
+                                    </Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
+                      {formData.role && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(() => {
+                            const selectedRole = roles.find(
+                              (r) => r.id === formData.role
+                            );
+                            if (selectedRole) {
+                              return `📋 ${
+                                selectedRole.description || "لا يوجد وصف"
+                              }`;
+                            }
+                            return "";
+                          })()}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

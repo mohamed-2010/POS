@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { POSHeader } from "@/components/POS/POSHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,12 @@ import {
   Search,
   Edit,
   Trash2,
-  AlertTriangle,
   Package,
+  Download,
+  Upload,
+  Calculator,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
 import {
   db,
@@ -43,6 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Inventory = () => {
   const { can, user } = useAuth();
@@ -52,15 +58,20 @@ const Inventory = () => {
   const [priceTypes, setPriceTypes] = useState<PriceType[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [inventoryDialogOpen, setInventoryDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     name: "",
     nameAr: "",
     price: 0,
-    prices: {} as Record<string, number>, // أسعار متعددة
+    prices: {} as Record<string, number>,
+    costPrice: 0,
     unitId: "",
     defaultPriceTypeId: "",
     category: "",
@@ -68,6 +79,8 @@ const Inventory = () => {
     barcode: "",
     minStock: 10,
     expiryDate: "",
+    imageUrl: "",
+    hasMultipleUnits: false,
   });
 
   const { getSetting } = useSettingsContext();
@@ -83,35 +96,61 @@ const Inventory = () => {
     const productsData = await db.getAll<Product>("products");
     setProducts(productsData);
 
-    // Load categories
     const categoriesData = await db.getAll<ProductCategory>(
       "productCategories"
     );
     const activeCategories = categoriesData.filter((c) => c.active);
     setCategories(activeCategories);
 
-    // Load units
     const unitsData = await db.getAll<Unit>("units");
     setUnits(unitsData);
 
-    // Load price types (sorted by display order)
     const priceTypesData = await db.getAll<PriceType>("priceTypes");
     const sortedPriceTypes = priceTypesData.sort(
       (a, b) => a.displayOrder - b.displayOrder
     );
     setPriceTypes(sortedPriceTypes);
 
-    // Load current shift
     const shiftsData = await db.getAll<Shift>("shifts");
     const activeShift = shiftsData.find((s) => s.status === "active");
     setCurrentShift(activeShift || null);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: "خطأ",
+          description: "حجم الصورة يجب أن يكون أقل من 2 ميجابايت",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setImagePreview(base64String);
+        setFormData({ ...formData, imageUrl: base64String });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImagePreview("");
+    setFormData({ ...formData, imageUrl: "" });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    // Validate required fields
     if (!formData.unitId) {
       toast({
         title: "خطأ",
@@ -121,7 +160,6 @@ const Inventory = () => {
       return;
     }
 
-    // Validate that at least one price is set
     if (Object.keys(formData.prices).length === 0) {
       toast({
         title: "خطأ",
@@ -129,6 +167,13 @@ const Inventory = () => {
         variant: "destructive",
       });
       return;
+    }
+
+    if (formData.costPrice === 0) {
+      toast({
+        title: "تحذير",
+        description: "لم تقم بإدخال سعر التكلفة. هل تريد المتابعة؟",
+      });
     }
 
     try {
@@ -143,14 +188,14 @@ const Inventory = () => {
           userName: user.username,
           shiftId: currentShift?.id,
         });
-        toast({ title: "تم تحديث المنتج بنجاح" });
+        toast({ title: "✅ تم تحديث المنتج بنجاح" });
       } else {
         await createWithAudit("products", product, {
           userId: user.id,
           userName: user.username,
           shiftId: currentShift?.id,
         });
-        toast({ title: "تم إضافة المنتج بنجاح" });
+        toast({ title: "✅ تم إضافة المنتج بنجاح" });
       }
 
       loadData();
@@ -167,6 +212,7 @@ const Inventory = () => {
       nameAr: product.nameAr,
       price: product.price,
       prices: product.prices || {},
+      costPrice: product.costPrice || 0,
       unitId: product.unitId || "",
       defaultPriceTypeId: product.defaultPriceTypeId || "",
       category: product.category || "",
@@ -174,7 +220,12 @@ const Inventory = () => {
       barcode: product.barcode || "",
       minStock: product.minStock || 10,
       expiryDate: product.expiryDate || "",
+      imageUrl: product.imageUrl || "",
+      hasMultipleUnits: product.hasMultipleUnits || false,
     });
+    if (product.imageUrl) {
+      setImagePreview(product.imageUrl);
+    }
     setDialogOpen(true);
   };
 
@@ -186,21 +237,19 @@ const Inventory = () => {
         userName: user.username,
         shiftId: currentShift?.id,
       });
-      toast({ title: "تم حذف المنتج بنجاح" });
+      toast({ title: "✅ تم حذف المنتج بنجاح" });
       loadData();
     }
   };
 
   const resetForm = () => {
-    // Get default values
     const defaultUnit = units.find((u) => u.isDefault);
-    const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
-
     setFormData({
       name: "",
       nameAr: "",
       price: 0,
       prices: {},
+      costPrice: 0,
       unitId: defaultUnit?.id || "",
       defaultPriceTypeId: "",
       category: "",
@@ -208,17 +257,220 @@ const Inventory = () => {
       barcode: "",
       minStock: 10,
       expiryDate: "",
+      imageUrl: "",
+      hasMultipleUnits: false,
     });
     setEditingProduct(null);
+    setImagePreview("");
     setDialogOpen(false);
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
+  // تصدير المنتجات إلى Excel
+  const exportToExcel = () => {
+    let htmlContent = `<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <style>
+    table { border-collapse: collapse; width: 100%; direction: rtl; }
+    th, td { border: 1px solid #000; padding: 8px; text-align: right; }
+    th { background-color: #4CAF50; color: white; font-weight: bold; }
+    tr:nth-child(even) { background-color: #f2f2f2; }
+    .title { font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="title">قائمة المنتجات</div>
+  <table>
+    <tr>
+      <th>الاسم بالعربي</th>
+      <th>الاسم بالإنجليزي</th>
+      <th>القسم</th>
+      <th>الكمية</th>
+      <th>سعر التكلفة</th>
+      <th>سعر البيع</th>
+      <th>الوحدة</th>
+      <th>الباركود</th>
+      <th>الحد الأدنى</th>
+      <th>تاريخ الصلاحية</th>
+    </tr>`;
+
+    products.forEach((product) => {
+      const unit = units.find((u) => u.id === product.unitId);
+      const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
+      const priceTypeId = product.defaultPriceTypeId || defaultPriceType?.id;
+      const displayPrice =
+        priceTypeId && product.prices?.[priceTypeId]
+          ? product.prices[priceTypeId]
+          : product.price || 0;
+
+      htmlContent += `
+    <tr>
+      <td>${product.nameAr || ""}</td>
+      <td>${product.name || ""}</td>
+      <td>${product.category || ""}</td>
+      <td>${product.stock || 0}</td>
+      <td>${product.costPrice || 0}</td>
+      <td>${displayPrice}</td>
+      <td>${unit?.name || ""}</td>
+      <td>${product.barcode || ""}</td>
+      <td>${product.minStock || 0}</td>
+      <td>${product.expiryDate || ""}</td>
+    </tr>`;
+    });
+
+    htmlContent += `
+  </table>
+</body>
+</html>`;
+
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + htmlContent], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const filename = `المنتجات_${new Date().toISOString().split("T")[0]}.xlsx`;
+
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "✅ تم التصدير بنجاح",
+      description: `تم تصدير ${products.length} منتج`,
+    });
+  };
+
+  // استيراد المنتجات من Excel
+  const importFromExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const rows = text.split("\n").filter((row) => row.trim());
+
+        if (rows.length < 2) {
+          toast({
+            title: "خطأ",
+            description: "الملف فارغ أو غير صحيح",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Skip header row
+        const dataRows = rows.slice(1);
+        let importedCount = 0;
+
+        for (const row of dataRows) {
+          const cols = row.split("\t");
+          if (cols.length < 4) continue;
+
+          const defaultUnit = units.find((u) => u.isDefault);
+          const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
+
+          const product: Product = {
+            id: Date.now().toString() + Math.random(),
+            nameAr: cols[0]?.trim() || "",
+            name: cols[1]?.trim() || "",
+            category: cols[2]?.trim() || "",
+            stock: parseInt(cols[3]) || 0,
+            costPrice: parseFloat(cols[4]) || 0,
+            price: parseFloat(cols[5]) || 0,
+            prices: defaultPriceType
+              ? { [defaultPriceType.id]: parseFloat(cols[5]) || 0 }
+              : {},
+            unitId: defaultUnit?.id || "",
+            barcode: cols[7]?.trim() || "",
+            minStock: parseInt(cols[8]) || 10,
+            expiryDate: cols[9]?.trim() || "",
+          };
+
+          if (product.nameAr) {
+            await createWithAudit("products", product, {
+              userId: user?.id || "",
+              userName: user?.username || "",
+              shiftId: currentShift?.id,
+            });
+            importedCount++;
+          }
+        }
+
+        loadData();
+        toast({
+          title: "✅ تم الاستيراد بنجاح",
+          description: `تم استيراد ${importedCount} منتج`,
+        });
+      } catch (error) {
+        toast({
+          title: "خطأ",
+          description: "حدث خطأ أثناء الاستيراد",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // حساب جرد المخزون
+  const calculateInventoryValue = () => {
+    let totalValue = 0;
+    let totalCost = 0;
+    let itemsCount = 0;
+    let outOfStock = 0;
+    let lowStock = 0;
+
+    products.forEach((product) => {
+      const cost = (product.costPrice || 0) * product.stock;
+      totalCost += cost;
+
+      const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
+      const priceTypeId = product.defaultPriceTypeId || defaultPriceType?.id;
+      const sellPrice =
+        priceTypeId && product.prices?.[priceTypeId]
+          ? product.prices[priceTypeId]
+          : product.price || 0;
+      totalValue += sellPrice * product.stock;
+
+      itemsCount++;
+      if (product.stock === 0) outOfStock++;
+      else if (product.stock <= (product.minStock || 10)) lowStock++;
+    });
+
+    return {
+      totalValue,
+      totalCost,
+      itemsCount,
+      outOfStock,
+      lowStock,
+      expectedProfit: totalValue - totalCost,
+    };
+  };
+
+  const showInventoryReport = () => {
+    setInventoryDialogOpen(true);
+  };
+
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
       p.nameAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.barcode?.includes(searchTerm)
-  );
+      p.barcode?.includes(searchTerm);
+
+    const matchesCategory =
+      selectedCategory === "all" || p.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   const getStockStatus = (product: Product) => {
     if (product.stock === 0)
@@ -228,41 +480,130 @@ const Inventory = () => {
     return { label: "متوفر", variant: "default" as const };
   };
 
+  const inventoryStats = calculateInventoryValue();
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <POSHeader />
       <div className="container mx-auto p-6">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">إدارة المخزون</h1>
-          {can("products", "create") && (
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              إضافة منتج
+          <div className="flex gap-2">
+            <Button
+              onClick={showInventoryReport}
+              variant="outline"
+              className="gap-2"
+            >
+              <Calculator className="h-4 w-4" />
+              جرد المخزون
             </Button>
-          )}
+            <Button
+              onClick={exportToExcel}
+              variant="outline"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              تصدير
+            </Button>
+            <Button variant="outline" className="gap-2" asChild>
+              <label>
+                <Upload className="h-4 w-4" />
+                استيراد
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.tsv"
+                  onChange={importFromExcel}
+                  className="hidden"
+                />
+              </label>
+            </Button>
+            {can("products", "create") && (
+              <Button onClick={() => setDialogOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                إضافة منتج
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="relative mb-6">
-          <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="البحث عن منتج..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pr-10"
-          />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="p-4">
+            <div className="text-sm text-muted-foreground">إجمالي المنتجات</div>
+            <div className="text-2xl font-bold">{products.length}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-muted-foreground">
+              قيمة المخزون (بيع)
+            </div>
+            <div className="text-2xl font-bold text-green-600">
+              {inventoryStats.totalValue.toFixed(2)} {currency}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-muted-foreground">منتجات نفذت</div>
+            <div className="text-2xl font-bold text-red-600">
+              {inventoryStats.outOfStock}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm text-muted-foreground">منتجات قليلة</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {inventoryStats.lowStock}
+            </div>
+          </Card>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Search and Filter */}
+        <div className="flex gap-4 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="البحث عن منتج..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pr-10"
+            />
+          </div>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="كل الأقسام" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الأقسام</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.nameAr}>
+                  {cat.nameAr}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Products Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredProducts.map((product) => {
             const status = getStockStatus(product);
             return (
-              <Card key={product.id} className="p-4">
+              <Card key={product.id} className="p-4 hover:shadow-lg transition-shadow">
+                {product.imageUrl && (
+                  <div className="mb-3 rounded-lg overflow-hidden h-32 bg-gray-100">
+                    <img
+                      src={product.imageUrl}
+                      alt={product.nameAr}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <h3 className="font-bold text-lg">{product.nameAr}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {product.category}
-                    </p>
+                    {product.category && (
+                      <p className="text-sm text-muted-foreground">
+                        {product.category}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant={status.variant}>{status.label}</Badge>
                       <span className="text-sm">الكمية: {product.stock}</span>
@@ -272,233 +613,408 @@ const Inventory = () => {
                     <Package className="h-5 w-5 text-primary" />
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-3 border-t">
-                  <span className="text-lg font-bold text-primary">
-                    {(() => {
-                      // Get default price type
-                      const defaultPriceType = priceTypes.find(
-                        (pt) => pt.isDefault
-                      );
-                      const priceTypeId =
-                        product.defaultPriceTypeId || defaultPriceType?.id;
-
-                      // Get price from prices object or fallback to old price
-                      const displayPrice =
-                        priceTypeId && product.prices?.[priceTypeId]
-                          ? product.prices[priceTypeId]
-                          : product.price || 0;
-
-                      return `${displayPrice.toFixed(2)} ${currency}`;
-                    })()}
-                  </span>
-                  <div className="flex gap-2">
-                    {can("products", "edit") && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(product)}
-                      >
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                    )}
-                    {can("products", "delete") && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDelete(product.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
+                <div className="space-y-1 text-sm mb-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">التكلفة:</span>
+                    <span className="font-medium">
+                      {(product.costPrice || 0).toFixed(2)} {currency}
+                    </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">البيع:</span>
+                    <span className="font-bold text-primary">
+                      {(() => {
+                        const defaultPriceType = priceTypes.find(
+                          (pt) => pt.isDefault
+                        );
+                        const priceTypeId =
+                          product.defaultPriceTypeId || defaultPriceType?.id;
+                        const displayPrice =
+                          priceTypeId && product.prices?.[priceTypeId]
+                            ? product.prices[priceTypeId]
+                            : product.price || 0;
+                        return `${displayPrice.toFixed(2)} ${currency}`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-3 border-t">
+                  {can("products", "edit") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEdit(product)}
+                      className="flex-1"
+                    >
+                      <Edit className="h-3 w-3 ml-1" />
+                      تعديل
+                    </Button>
+                  )}
+                  {can("products", "delete") && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDelete(product.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </Card>
             );
           })}
         </div>
 
+        {/* Add/Edit Product Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto">
+          <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingProduct ? "تعديل منتج" : "إضافة منتج جديد"}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <Label>الاسم بالعربي *</Label>
-                  <Input
-                    required
-                    value={formData.nameAr}
-                    onChange={(e) =>
-                      setFormData({ ...formData, nameAr: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>الاسم بالإنجليزي</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>الفئة</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, category: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر الفئة أو اتركها فارغة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.nameAr}>
-                          {cat.nameAr}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>وحدة القياس *</Label>
-                  <Select
-                    value={formData.unitId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, unitId: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر وحدة القياس" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {units.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.name} ({unit.symbol})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <Tabs defaultValue="basic" dir="rtl">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="basic">المعلومات الأساسية</TabsTrigger>
+                  <TabsTrigger value="pricing">الأسعار والصورة</TabsTrigger>
+                </TabsList>
 
-                {/* Dynamic price fields for each price type */}
-                <div className="space-y-3 p-4 border rounded-lg">
-                  <Label className="font-semibold">الأسعار *</Label>
-                  {priceTypes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      لا توجد أنواع تسعير. يرجى إضافة نوع سعر واحد على الأقل من
-                      إعدادات النظام.
+                <TabsContent value="basic" className="space-y-4">
+                  <div>
+                    <Label>الاسم بالعربي *</Label>
+                    <Input
+                      required
+                      value={formData.nameAr}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nameAr: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>الاسم بالإنجليزي</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>القسم</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, category: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر القسم" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.nameAr}>
+                            {cat.nameAr}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>وحدة القياس *</Label>
+                    <Select
+                      value={formData.unitId}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, unitId: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر الوحدة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {units.map((unit) => (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.name} ({unit.symbol})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>الكمية *</Label>
+                      <Input
+                        type="number"
+                        required
+                        value={formData.stock}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            stock: parseInt(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>الحد الأدنى</Label>
+                      <Input
+                        type="number"
+                        value={formData.minStock}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            minStock: parseInt(e.target.value) || 10,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>الباركود</Label>
+                      <Input
+                        value={formData.barcode}
+                        onChange={(e) =>
+                          setFormData({ ...formData, barcode: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>تاريخ الصلاحية</Label>
+                      <Input
+                        type="date"
+                        value={formData.expiryDate}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            expiryDate: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="pricing" className="space-y-4">
+                  <div>
+                    <Label>سعر التكلفة *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formData.costPrice}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          costPrice: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      مهم لحساب جرد المخزون والأرباح
                     </p>
-                  ) : (
-                    priceTypes.map((priceType) => (
-                      <div key={priceType.id}>
-                        <Label className="text-sm">
-                          {priceType.name}
-                          {priceType.isDefault && (
-                            <Badge variant="outline" className="mr-2 text-xs">
-                              افتراضي
-                            </Badge>
-                          )}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.prices[priceType.id] || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              prices: {
-                                ...formData.prices,
-                                [priceType.id]: parseFloat(e.target.value) || 0,
-                              },
-                            })
-                          }
-                        />
-                      </div>
-                    ))
-                  )}
-                </div>
+                  </div>
 
-                <div>
-                  <Label>نوع السعر الافتراضي (اختياري)</Label>
-                  <Select
-                    value={formData.defaultPriceTypeId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, defaultPriceTypeId: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="افتراضي النظام" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {priceTypes.map((pt) => (
-                        <SelectItem key={pt.id} value={pt.id}>
-                          {pt.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>الكمية *</Label>
-                  <Input
-                    type="number"
-                    required
-                    value={formData.stock}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        stock: parseInt(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>الحد الأدنى للمخزون</Label>
-                  <Input
-                    type="number"
-                    value={formData.minStock}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        minStock: parseInt(e.target.value) || 10,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>الباركود</Label>
-                  <Input
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, barcode: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>تاريخ الصلاحية</Label>
-                  <Input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, expiryDate: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <DialogFooter className="mt-4">
+                  <div className="space-y-3 p-4 border rounded-lg">
+                    <Label className="font-semibold">أسعار البيع *</Label>
+                    {priceTypes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        لا توجد أنواع تسعير. يرجى إضافتها من الإعدادات.
+                      </p>
+                    ) : (
+                      priceTypes.map((priceType) => (
+                        <div key={priceType.id}>
+                          <Label className="text-sm">
+                            {priceType.name}
+                            {priceType.isDefault && (
+                              <Badge variant="outline" className="mr-2 text-xs">
+                                افتراضي
+                              </Badge>
+                            )}
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={formData.prices[priceType.id] || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                prices: {
+                                  ...formData.prices,
+                                  [priceType.id]:
+                                    parseFloat(e.target.value) || 0,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div>
+                    <Label className="mb-2 block">صورة المنتج</Label>
+                    {imagePreview ? (
+                      <div className="relative w-full h-48 border rounded-lg overflow-hidden">
+                        <img
+                          src={imagePreview}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 left-2"
+                          onClick={removeImage}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                        <ImageIcon className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          id="product-image"
+                        />
+                        <Label
+                          htmlFor="product-image"
+                          className="cursor-pointer text-primary hover:underline"
+                        >
+                          اضغط لاختيار صورة
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          الحد الأقصى: 2 ميجابايت
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2 space-x-reverse">
+                    <Checkbox
+                      id="multipleUnits"
+                      checked={formData.hasMultipleUnits}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          hasMultipleUnits: checked as boolean,
+                        })
+                      }
+                    />
+                    <Label htmlFor="multipleUnits" className="cursor-pointer">
+                      المنتج له وحدات متعددة (كرتونة، علبة، قطعة)
+                    </Label>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter className="mt-6">
                 <Button type="button" variant="outline" onClick={resetForm}>
                   إلغاء
                 </Button>
-                <Button type="submit">حفظ</Button>
+                <Button type="submit">حفظ المنتج</Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Inventory Report Dialog */}
+        <Dialog open={inventoryDialogOpen} onOpenChange={setInventoryDialogOpen}>
+          <DialogContent dir="rtl" className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                جرد المخزون
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">
+                    عدد المنتجات
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {inventoryStats.itemsCount}
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">
+                    قيمة التكلفة
+                  </div>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {inventoryStats.totalCost.toFixed(2)} {currency}
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">
+                    قيمة البيع المتوقعة
+                  </div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {inventoryStats.totalValue.toFixed(2)} {currency}
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">
+                    الربح المتوقع
+                  </div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {inventoryStats.expectedProfit.toFixed(2)} {currency}
+                  </div>
+                </Card>
+              </div>
+
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3">حالة المخزون</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span>منتجات نفذت</span>
+                    <Badge variant="destructive">
+                      {inventoryStats.outOfStock}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>منتجات قليلة</span>
+                    <Badge variant="default">
+                      {inventoryStats.lowStock}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>منتجات متوفرة</span>
+                    <Badge variant="default">
+                      {inventoryStats.itemsCount -
+                        inventoryStats.outOfStock -
+                        inventoryStats.lowStock}
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
+
+              <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  💡 <strong>ملاحظة:</strong> هذا الجرد يعتمد على أسعار التكلفة
+                  المسجلة. تأكد من تحديث أسعار التكلفة بشكل دوري للحصول على
+                  بيانات دقيقة.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setInventoryDialogOpen(false)}
+              >
+                إغلاق
+              </Button>
+              <Button onClick={exportToExcel}>
+                <Download className="h-4 w-4 ml-2" />
+                تصدير التقرير
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

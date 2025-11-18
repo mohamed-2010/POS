@@ -1,13 +1,14 @@
 // نظام قاعدة البيانات المحلية IndexedDB
 const DB_NAME = "MASRPOS";
-const DB_VERSION = 12; // Added Units, PriceTypes, PaymentMethods
+const DB_VERSION = 13; // Added ProductUnits, Warehouses, ProductStock for multi-unit and multi-warehouse support
 
 export interface User {
   id: string;
   username: string;
   password: string;
   name: string;
-  role: "admin" | "manager" | "cashier" | "accountant";
+  role: "admin" | "manager" | "cashier" | "accountant" | string; // يدعم الأدوار الثابتة والديناميكية
+  roleId?: string; // معرف الدور من جدول roles (للأدوار المخصصة)
   active: boolean;
   createdAt?: string;
 }
@@ -19,6 +20,40 @@ export interface Unit {
   symbol: string; // مثل: "كجم"
   isDefault: boolean;
   createdAt: string;
+}
+
+// الوحدات المتعددة للمنتج (مثل: كرتونة = 10 قطع)
+export interface ProductUnit {
+  id: string;
+  productId: string;
+  unitId: string;
+  unitName: string; // للعرض
+  conversionFactor: number; // كم قطعة في هذه الوحدة (مثلاً: كرتونة = 10)
+  price: number; // سعر البيع لهذه الوحدة
+  barcode?: string; // باركود خاص بهذه الوحدة
+  isBaseUnit: boolean; // هل هي الوحدة الأساسية (القطعة)
+  createdAt: string;
+}
+
+// المخازن
+export interface Warehouse {
+  id: string;
+  name: string;
+  nameAr: string;
+  location?: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// مخزون المنتج في كل مخزن
+export interface ProductStock {
+  id: string;
+  productId: string;
+  warehouseId: string;
+  quantity: number;
+  minStock?: number;
+  updatedAt: string;
 }
 
 // أنواع التسعير (عادي، جملة، تجزئة، خاص، إلخ)
@@ -69,13 +104,16 @@ export interface Product {
   nameAr: string;
   price: number; // للتوافق مع الكود القديم - سيتم استخدام prices بدلاً منه
   prices: Record<string, number>; // { priceTypeId: price }
-  unitId: string; // معرف وحدة القياس
+  costPrice: number; // سعر التكلفة للمنتج (مهم لحساب الجرد والربح)
+  unitId: string; // معرف وحدة القياس الأساسية
   defaultPriceTypeId?: string; // نوع السعر الافتراضي للمنتج (اختياري، إذا كان مختلف عن الافتراضي العام)
   category?: string; // اسم القسم من جدول productCategories
-  stock: number;
+  stock: number; // الكمية الإجمالية (للتوافق مع الكود القديم)
   barcode?: string;
   minStock?: number;
   expiryDate?: string;
+  imageUrl?: string; // رابط صورة المنتج
+  hasMultipleUnits?: boolean; // هل للمنتج وحدات متعددة
 }
 
 export interface Invoice {
@@ -108,9 +146,11 @@ export interface InvoiceItem {
   total: number;
   unitId: string; // وحدة القياس
   unitName: string; // اسم الوحدة للعرض
+  conversionFactor: number; // معامل التحويل (كرتونة = 10 قطع)
   priceTypeId: string; // نوع السعر المستخدم
   priceTypeName: string; // اسم نوع السعر للعرض
   returnedQuantity?: number; // الكمية المرتجعة من هذا المنتج
+  warehouseId?: string; // المخزن الذي تم البيع منه
 }
 
 export interface InstallmentPlan {
@@ -174,7 +214,8 @@ export interface Employee {
   deductions?: number; // الخصومات الشهرية الثابتة
   active: boolean;
   userId?: string;
-  role?: "admin" | "manager" | "cashier" | "accountant";
+  role?: "admin" | "manager" | "cashier" | "accountant" | string; // يدعم الأدوار الثابتة والديناميكية
+  roleId?: string; // معرف الدور من جدول roles (للأدوار المخصصة)
   notes?: string;
 }
 
@@ -1038,6 +1079,62 @@ class IndexedDBService {
             unique: false,
           });
           paymentMethodsStore.createIndex("createdAt", "createdAt", {
+            unique: false,
+          });
+        }
+
+        // Product Units store (v13) - الوحدات المتعددة للمنتج
+        if (!db.objectStoreNames.contains("productUnits")) {
+          const productUnitsStore = db.createObjectStore("productUnits", {
+            keyPath: "id",
+          });
+          productUnitsStore.createIndex("productId", "productId", {
+            unique: false,
+          });
+          productUnitsStore.createIndex("unitId", "unitId", { unique: false });
+          productUnitsStore.createIndex("barcode", "barcode", {
+            unique: false,
+          });
+          productUnitsStore.createIndex("createdAt", "createdAt", {
+            unique: false,
+          });
+        }
+
+        // Warehouses store (v13)
+        if (!db.objectStoreNames.contains("warehouses")) {
+          const warehousesStore = db.createObjectStore("warehouses", {
+            keyPath: "id",
+          });
+          warehousesStore.createIndex("nameAr", "nameAr", { unique: true });
+          warehousesStore.createIndex("isDefault", "isDefault", {
+            unique: false,
+          });
+          warehousesStore.createIndex("isActive", "isActive", {
+            unique: false,
+          });
+          warehousesStore.createIndex("createdAt", "createdAt", {
+            unique: false,
+          });
+        }
+
+        // Product Stock store (v13) - مخزون المنتج في كل مخزن
+        if (!db.objectStoreNames.contains("productStock")) {
+          const productStockStore = db.createObjectStore("productStock", {
+            keyPath: "id",
+          });
+          productStockStore.createIndex("productId", "productId", {
+            unique: false,
+          });
+          productStockStore.createIndex("warehouseId", "warehouseId", {
+            unique: false,
+          });
+          // إنشاء index مركب للبحث بـ productId + warehouseId
+          productStockStore.createIndex(
+            "productWarehouse",
+            ["productId", "warehouseId"],
+            { unique: true }
+          );
+          productStockStore.createIndex("updatedAt", "updatedAt", {
             unique: false,
           });
         }

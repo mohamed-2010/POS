@@ -28,6 +28,7 @@ import {
   SalesReturnItem,
   Product,
   Shift,
+  Customer,
 } from "@/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ const SalesReturns = () => {
   const [refundMethod, setRefundMethod] = useState<
     "cash" | "credit" | "balance"
   >("cash");
+  const [customerBalance, setCustomerBalance] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -59,10 +61,15 @@ const SalesReturns = () => {
     setSalesReturns(sortedReturns);
 
     const allInvoices = await db.getAll<Invoice>("invoices");
-    setInvoices(allInvoices);
+    // ترتيب الفواتير من الأحدث إلى الأقدم
+    const sortedInvoices = allInvoices.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    setInvoices(sortedInvoices);
   };
 
-  const handleSelectInvoice = (invoice: Invoice) => {
+  const handleSelectInvoice = async (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     // تحويل عناصر الفاتورة لعناصر مرتجع
     const items: SalesReturnItem[] = invoice.items.map((item) => ({
@@ -74,6 +81,17 @@ const SalesReturns = () => {
       reason: "",
     }));
     setReturnItems(items);
+
+    // تحميل رصيد العميل إذا كان موجوداً
+    if (invoice.customerId) {
+      const customer = await db.get<Customer>("customers", invoice.customerId);
+      if (customer) {
+        setCustomerBalance(customer.currentBalance);
+      }
+    } else {
+      setCustomerBalance(null);
+    }
+
     setIsCreateDialogOpen(true);
   };
 
@@ -102,6 +120,17 @@ const SalesReturns = () => {
       return;
     }
 
+    // التحقق من أن طريقة الاسترجاع مناسبة للعميل
+    if (
+      !selectedInvoice.customerId &&
+      (refundMethod === "credit" || refundMethod === "balance")
+    ) {
+      toast.error(
+        "لا يمكن استخدام طرق الرصيد مع فاتورة نقدية. يرجى اختيار 'نقداً'"
+      );
+      return;
+    }
+
     // تصفية العناصر التي تم إرجاعها فقط
     const itemsToReturn = returnItems.filter((item) => item.quantity > 0);
 
@@ -114,6 +143,22 @@ const SalesReturns = () => {
     const taxRate = 0.14; // يمكن أخذها من الإعدادات
     const tax = subtotal * taxRate;
     const total = subtotal + tax;
+
+    // التحقق من رصيد العميل إذا كانت الطريقة "خصم من رصيد العميل"
+    if (refundMethod === "balance" && selectedInvoice.customerId) {
+      const customer = await db.get<Customer>(
+        "customers",
+        selectedInvoice.customerId
+      );
+      if (customer && customer.currentBalance < total) {
+        toast.error(
+          `رصيد العميل (${formatCurrency(
+            customer.currentBalance
+          )}) غير كافٍ. المبلغ المطلوب: ${formatCurrency(total)}`
+        );
+        return;
+      }
+    }
 
     // الحصول على الوردية الحالية
     const allShifts = await db.getAll<Shift>("shifts");
@@ -130,7 +175,7 @@ const SalesReturns = () => {
       total,
       reason,
       userId: user?.id || "",
-      userName: user?.fullName || user?.username || "",
+      userName: user?.username || "",
       createdAt: new Date().toISOString(),
       refundMethod,
       refundStatus: "pending",
@@ -179,6 +224,40 @@ const SalesReturns = () => {
         await db.update("shifts", updatedShift);
       }
 
+      // معالجة طريقة الاسترجاع
+      if (selectedInvoice.customerId) {
+        const customer = await db.get<Customer>(
+          "customers",
+          selectedInvoice.customerId
+        );
+
+        if (customer) {
+          if (refundMethod === "credit") {
+            // إضافة المبلغ إلى رصيد العميل
+            customer.currentBalance += total;
+            await db.update("customers", customer);
+            toast.success(
+              `تم إضافة ${formatCurrency(
+                total
+              )} إلى رصيد العميل (الرصيد الجديد: ${formatCurrency(
+                customer.currentBalance
+              )})`
+            );
+          } else if (refundMethod === "balance") {
+            // خصم المبلغ من رصيد العميل
+            customer.currentBalance -= total;
+            await db.update("customers", customer);
+            toast.success(
+              `تم خصم ${formatCurrency(
+                total
+              )} من رصيد العميل (الرصيد المتبقي: ${formatCurrency(
+                customer.currentBalance
+              )})`
+            );
+          }
+        }
+      }
+
       // تحديث حالة المرجع إلى مكتمل
       newReturn.refundStatus = "completed";
       await db.update("salesReturns", newReturn);
@@ -198,6 +277,7 @@ const SalesReturns = () => {
     setReturnItems([]);
     setReason("");
     setRefundMethod("cash");
+    setCustomerBalance(null);
   };
 
   const filteredInvoices = invoices.filter(
@@ -241,57 +321,90 @@ const SalesReturns = () => {
             )}
           </div>
 
+          {/* Info Card */}
+          <Card className="p-4 mb-6 bg-blue-50 dark:bg-blue-950 border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="bg-blue-500 text-white p-2 rounded-lg">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-blue-900 dark:text-blue-100 mb-2">
+                  طرق استرجاع المبالغ
+                </h3>
+                <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                  <li>
+                    💵 <strong>نقداً:</strong> إرجاع المبلغ نقداً للعميل فوراً
+                  </li>
+                  <li>
+                    💳 <strong>رصيد للعميل:</strong> إضافة المبلغ إلى رصيد
+                    العميل للاستخدام في مشتريات قادمة
+                  </li>
+                  <li>
+                    📉 <strong>خصم من رصيد العميل:</strong> خصم المبلغ من رصيد
+                    العميل الحالي (في حالة إرجاع منتجات اشتراها بالرصيد)
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </Card>
+
           {/* قائمة المرتجعات */}
           <Card className="p-6">
             <h2 className="text-xl font-bold mb-4">سجل المرتجعات</h2>
             <div className="space-y-4">
-              {salesReturns.map((returnDoc) => (
-                <Card key={returnDoc.id} className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText className="h-4 w-4" />
-                        <span className="font-bold">{returnDoc.id}</span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            returnDoc.refundStatus === "completed"
-                              ? "bg-green-100 text-green-800"
+              {salesReturns.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  لا توجد مرتجعات حتى الآن
+                </div>
+              ) : (
+                salesReturns.map((returnDoc) => (
+                  <Card key={returnDoc.id} className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="h-4 w-4" />
+                          <span className="font-bold">{returnDoc.id}</span>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              returnDoc.refundStatus === "completed"
+                                ? "bg-green-100 text-green-800"
+                                : returnDoc.refundStatus === "pending"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {returnDoc.refundStatus === "completed"
+                              ? "مكتمل"
                               : returnDoc.refundStatus === "pending"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {returnDoc.refundStatus === "completed"
-                            ? "مكتمل"
-                            : returnDoc.refundStatus === "pending"
-                            ? "قيد الانتظار"
-                            : "مرفوض"}
-                        </span>
+                              ? "قيد الانتظار"
+                              : "مرفوض"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          الفاتورة الأصلية: {returnDoc.originalInvoiceId}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          العميل: {returnDoc.customerName || "غير محدد"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          السبب: {returnDoc.reason}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          التاريخ: {formatDate(returnDoc.createdAt)}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        الفاتورة الأصلية: {returnDoc.originalInvoiceId}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        العميل: {returnDoc.customerName || "غير محدد"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        السبب: {returnDoc.reason}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        التاريخ: {formatDate(returnDoc.createdAt)}
-                      </p>
+                      <div className="text-left">
+                        <p className="text-2xl font-bold text-red-600">
+                          {formatCurrency(returnDoc.total)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          عدد المنتجات: {returnDoc.items.length}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <p className="text-2xl font-bold text-red-600">
-                        {formatCurrency(returnDoc.total)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        عدد المنتجات: {returnDoc.items.length}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                ))
+              )}
             </div>
           </Card>
 
@@ -320,33 +433,75 @@ const SalesReturns = () => {
                     />
                   </div>
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {filteredInvoices.map((invoice) => (
-                      <Card
-                        key={invoice.id}
-                        className="p-3 cursor-pointer hover:bg-muted"
-                        onClick={() => handleSelectInvoice(invoice)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-bold">{invoice.id}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {invoice.customerName || "عميل نقدي"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(invoice.createdAt)}
-                            </p>
-                          </div>
-                          <div className="text-left">
-                            <p className="font-bold">
-                              {formatCurrency(invoice.total)}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {invoice.items.length} منتج
-                            </p>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
+                    {filteredInvoices.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        لا توجد فواتير مطابقة للبحث
+                      </div>
+                    ) : (
+                      filteredInvoices.map((invoice) => {
+                        const hasReturns = invoice.items.some(
+                          (item) => (item.returnedQuantity || 0) > 0
+                        );
+                        const fullyReturned = invoice.items.every(
+                          (item) =>
+                            (item.returnedQuantity || 0) >= item.quantity
+                        );
+
+                        return (
+                          <Card
+                            key={invoice.id}
+                            className={`p-3 cursor-pointer hover:bg-muted transition-colors ${
+                              fullyReturned
+                                ? "bg-red-50 dark:bg-red-950/20 border-red-200"
+                                : hasReturns
+                                ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200"
+                                : ""
+                            }`}
+                            onClick={() => handleSelectInvoice(invoice)}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold">{invoice.id}</p>
+                                  {fullyReturned && (
+                                    <span className="px-2 py-0.5 text-xs bg-red-500 text-white rounded">
+                                      مرتجعة بالكامل
+                                    </span>
+                                  )}
+                                  {hasReturns && !fullyReturned && (
+                                    <span className="px-2 py-0.5 text-xs bg-yellow-500 text-white rounded">
+                                      مرتجعة جزئياً
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {invoice.customerName || "عميل نقدي"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(invoice.createdAt)} -{" "}
+                                  {invoice.userName}
+                                </p>
+                              </div>
+                              <div className="text-left">
+                                <p className="font-bold">
+                                  {formatCurrency(invoice.total)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {invoice.items.length} منتج
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {invoice.paymentStatus === "paid"
+                                    ? "مدفوعة"
+                                    : invoice.paymentStatus === "partial"
+                                    ? "مدفوعة جزئياً"
+                                    : "غير مدفوعة"}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               ) : (
@@ -471,10 +626,101 @@ const SalesReturns = () => {
                         )
                       }
                     >
-                      <option value="cash">نقداً</option>
-                      <option value="credit">رصيد للعميل</option>
-                      <option value="balance">خصم من رصيد العميل</option>
+                      <option value="cash">
+                        نقداً - استرجاع المبلغ للعميل
+                      </option>
+                      <option value="credit">
+                        رصيد للعميل - إضافة المبلغ إلى رصيد العميل
+                      </option>
+                      <option value="balance">
+                        خصم من رصيد العميل - خصم المبلغ من رصيد العميل الحالي
+                      </option>
                     </select>
+                    {refundMethod === "credit" && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        💡 سيتم إضافة المبلغ إلى رصيد العميل ليستخدمه في مشتريات
+                        قادمة
+                      </p>
+                    )}
+                    {refundMethod === "balance" && (
+                      <p className="text-xs text-orange-600 mt-1">
+                        ⚠️ سيتم خصم المبلغ من رصيد العميل الحالي (يجب أن يكون
+                        الرصيد كافياً)
+                      </p>
+                    )}
+                    {refundMethod === "cash" && (
+                      <p className="text-xs text-green-600 mt-1">
+                        💵 سيتم إرجاع المبلغ نقداً للعميل
+                      </p>
+                    )}
+                    {selectedInvoice.customerId && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 rounded-md">
+                        <p className="text-sm font-medium">
+                          العميل: {selectedInvoice.customerName}
+                        </p>
+                        {customerBalance !== null && (
+                          <p className="text-sm">
+                            الرصيد الحالي:{" "}
+                            <span
+                              className={
+                                customerBalance >= 0
+                                  ? "text-green-600 font-bold"
+                                  : "text-red-600 font-bold"
+                              }
+                            >
+                              {formatCurrency(customerBalance)}
+                            </span>
+                          </p>
+                        )}
+                        {refundMethod === "balance" &&
+                          customerBalance !== null && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              الرصيد بعد الخصم:{" "}
+                              <span
+                                className={
+                                  customerBalance -
+                                    returnItems.reduce(
+                                      (sum, item) => sum + item.total,
+                                      0
+                                    ) >=
+                                  0
+                                    ? "text-green-600"
+                                    : "text-red-600 font-bold"
+                                }
+                              >
+                                {formatCurrency(
+                                  customerBalance -
+                                    returnItems.reduce(
+                                      (sum, item) => sum + item.total,
+                                      0
+                                    )
+                                )}
+                              </span>
+                            </p>
+                          )}
+                        {refundMethod === "credit" &&
+                          customerBalance !== null && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              الرصيد بعد الإضافة:{" "}
+                              <span className="text-green-600 font-bold">
+                                {formatCurrency(
+                                  customerBalance +
+                                    returnItems.reduce(
+                                      (sum, item) => sum + item.total,
+                                      0
+                                    )
+                                )}
+                              </span>
+                            </p>
+                          )}
+                      </div>
+                    )}
+                    {!selectedInvoice.customerId && refundMethod !== "cash" && (
+                      <p className="text-xs text-red-600 mt-1">
+                        ⚠️ هذه الفاتورة لعميل نقدي. يجب اختيار "نقداً" كطريقة
+                        استرجاع
+                      </p>
+                    )}
                   </div>
 
                   <div className="p-3 bg-muted rounded-md">
