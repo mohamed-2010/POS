@@ -390,7 +390,7 @@ const Reports = () => {
   );
 
   // دالة تصدير البيانات إلى Excel محسّنة
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
       // تجهيز البيانات بشكل منظم
       const worksheetData: any[] = [];
@@ -654,29 +654,65 @@ const Reports = () => {
 </body>
 </html>`;
 
-      // إنشاء Blob بصيغة HTML (Excel سيفتحه كـ xlsx)
+      // إنشاء المحتوى النهائي مع BOM
       const BOM = "\uFEFF";
-      const blob = new Blob([BOM + htmlContent], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;",
-      });
+      const finalContent = BOM + htmlContent;
 
-      // تنزيل الملف
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      const filename = `تقرير_مبيعات_${startDate}_إلى_${endDate}.xlsx`;
+      // التحقق من وجود Electron API
+      if (window.electronAPI && (window.electronAPI as any).file) {
+        // استخدام حوار الحفظ في Electron
+        const filename = `تقرير_مبيعات_${startDate}_إلى_${endDate}.xlsx`;
+        const result = await (window.electronAPI as any).file.saveDialog({
+          defaultPath: filename,
+          filters: [
+            { name: "Excel Files", extensions: ["xlsx"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+          content: finalContent,
+        });
 
-      link.setAttribute("href", url);
-      link.setAttribute("download", filename);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+        if (result.success && result.filePath) {
+          toast({
+            title: "✅ تم الحفظ بنجاح",
+            description: `تم حفظ التقرير في: ${result.filePath}`,
+            duration: 5000,
+          });
+        } else if (result.canceled) {
+          toast({
+            title: "تم الإلغاء",
+            description: "تم إلغاء عملية الحفظ",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "❌ خطأ في الحفظ",
+            description: result.error || "حدث خطأ أثناء حفظ الملف",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Fallback للمتصفح العادي
+        const blob = new Blob([finalContent], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;",
+        });
 
-      toast({
-        title: "✅ تم التصدير بنجاح",
-        description: `تم تصدير التقرير إلى ملف: ${filename}`,
-      });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        const filename = `تقرير_مبيعات_${startDate}_إلى_${endDate}.xlsx`;
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: "✅ تم التصدير بنجاح",
+          description: `تم تصدير التقرير إلى ملف: ${filename}`,
+        });
+      }
     } catch (error) {
       console.error("خطأ في التصدير:", error);
       toast({

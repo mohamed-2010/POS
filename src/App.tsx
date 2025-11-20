@@ -18,7 +18,7 @@ import { ShiftProvider } from "@/contexts/ShiftContext";
 import Index from "./pages/Index";
 import POSv2 from "./pages/POSv2";
 import Customers from "./pages/Customers";
-import Reports from "./pages/Reports";
+import Reports from "./pages/ReportsNew";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Suppliers from "./pages/Suppliers";
@@ -35,6 +35,7 @@ import Credit from "./pages/Credit";
 import Shifts from "./pages/Shifts";
 import SalesReturns from "./pages/SalesReturns";
 import PurchaseReturns from "./pages/PurchaseReturns";
+import Purchases from "./pages/Purchases";
 import RolesPermissions from "./pages/RolesPermissions";
 import DepositSources from "./pages/DepositSources";
 import Deposits from "./pages/Deposits";
@@ -65,6 +66,36 @@ const RouteCleanup = ({ children }: { children: React.ReactNode }) => {
     }
   }, [location.pathname, navigate]);
 
+  // تنظيف Dialog Overlays العالقة عند تغيير المسار
+  useEffect(() => {
+    const cleanupStuckOverlays = () => {
+      // إزالة أي Dialog Overlays متبقية في DOM
+      const overlays = document.querySelectorAll("[data-radix-dialog-overlay]");
+      overlays.forEach((overlay) => {
+        // التحقق من أن الـ overlay ليس له dialog content مرتبط
+        const dialogContent = overlay.nextElementSibling;
+        if (
+          !dialogContent ||
+          !dialogContent.hasAttribute("data-state") ||
+          dialogContent.getAttribute("data-state") === "closed"
+        ) {
+          overlay.remove();
+        }
+      });
+
+      // إزالة pointer-events: none من body إذا كان موجوداً
+      document.body.style.removeProperty("pointer-events");
+    };
+
+    // تنظيف فوري
+    cleanupStuckOverlays();
+
+    // تنظيف بعد delay قصير للتأكد
+    const timeoutId = setTimeout(cleanupStuckOverlays, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [location.pathname]);
+
   return <>{children}</>;
 };
 
@@ -91,6 +122,35 @@ const App = () => {
   // استخدام HashRouter في Electron و BrowserRouter في الويب
   const isElectron = !!(window as any).electronAPI;
   const Router = isElectron ? HashRouter : BrowserRouter;
+
+  // تنظيف عام عند تحميل التطبيق
+  useEffect(() => {
+    const globalCleanup = () => {
+      // إزالة أي overlays عالقة
+      const allOverlays = document.querySelectorAll(
+        "[data-radix-dialog-overlay], [data-radix-popover-content], [data-radix-select-content]"
+      );
+      allOverlays.forEach((el) => {
+        const state = el.getAttribute("data-state");
+        if (state === "closed" || !state) {
+          el.remove();
+        }
+      });
+
+      // التأكد من أن body ليس لديه pointer-events: none
+      if (document.body.style.pointerEvents === "none") {
+        document.body.style.removeProperty("pointer-events");
+      }
+    };
+
+    // تنظيف عند التحميل
+    globalCleanup();
+
+    // تنظيف دوري كل 5 ثوانٍ للتأكد
+    const intervalId = setInterval(globalCleanup, 5000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -245,6 +305,14 @@ const App = () => {
                       element={
                         <ProtectedRoute>
                           <SalesReturns />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/purchases"
+                      element={
+                        <ProtectedRoute>
+                          <Purchases />
                         </ProtectedRoute>
                       }
                     />

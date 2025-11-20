@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { db, Shift, Employee } from "@/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
+import { useShift } from "@/contexts/ShiftContext";
 import { toast } from "sonner";
 import { CashMovementDialog } from "@/components/CashMovementDialog";
 import { XReportDialog } from "@/components/XReportDialog";
@@ -30,6 +31,7 @@ import { ZReportDialog } from "@/components/ZReportDialog";
 
 const Shifts = () => {
   const { user, can } = useAuth();
+  const { refreshShift } = useShift();
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -140,13 +142,18 @@ const Shifts = () => {
       actualCash: actualCash,
       difference,
       status: "closed",
-      closedBy: user?.fullName || user?.username || "غير معروف",
+      closedBy: user?.name || user?.username || "غير معروف",
     };
 
     try {
       await db.update("shifts", updatedShift);
       setCurrentShift(null);
       setIsZReportOpen(false);
+
+      // Refresh shift context to update UI
+      if (refreshShift) {
+        await refreshShift();
+      }
 
       if (difference !== 0) {
         toast.warning(

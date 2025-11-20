@@ -35,7 +35,12 @@ import {
   Clock,
   Search,
 } from "lucide-react";
-import { db, EmployeeAdvance, Employee } from "@/lib/indexedDB";
+import {
+  db,
+  EmployeeAdvance,
+  Employee,
+  EmployeeDeduction,
+} from "@/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -145,7 +150,7 @@ const EmployeeAdvances = () => {
   };
 
   const handleApprove = async (advance: EmployeeAdvance) => {
-    if (!can("employees", "edit")) {
+    if (!can("employeeAdvances", "approve")) {
       toast({
         title: "غير مصرح",
         description: "ليس لديك صلاحية لاعتماد السُلف",
@@ -155,6 +160,7 @@ const EmployeeAdvances = () => {
     }
 
     try {
+      // تحديث حالة السلفة إلى معتمدة
       const updatedAdvance: EmployeeAdvance = {
         ...advance,
         status: "approved",
@@ -164,10 +170,34 @@ const EmployeeAdvances = () => {
       };
 
       await db.update("employeeAdvances", updatedAdvance);
+
+      // إذا كان هناك خصم شهري محدد، أنشئ خصم تلقائي من الراتب
+      if (advance.deductionAmount && advance.deductionAmount > 0) {
+        const deduction = {
+          id: `advance-deduction-${advance.id}-${Date.now()}`,
+          employeeId: advance.employeeId,
+          employeeName: advance.employeeName,
+          amount: advance.deductionAmount,
+          type: "fixed" as const, // خصم ثابت شهري
+          reason: `خصم سُلفة: ${advance.reason}`,
+          startDate: new Date().toISOString().split("T")[0],
+          status: "active" as const,
+          userId: user?.id || "",
+          userName: user?.name || "",
+          notes: `خصم تلقائي من الراتب للسُلفة رقم ${advance.id}. المبلغ الكلي: ${advance.amount} ج.م`,
+          createdAt: new Date().toISOString(),
+        };
+
+        await db.add("employeeDeductions", deduction);
+      }
+
       await loadData();
 
       toast({
         title: "تم اعتماد السُلفة",
+        description: advance.deductionAmount
+          ? `تم إنشاء خصم شهري بقيمة ${advance.deductionAmount} ج.م من راتب الموظف`
+          : undefined,
       });
     } catch (error) {
       console.error("Error approving advance:", error);
@@ -179,7 +209,7 @@ const EmployeeAdvances = () => {
   };
 
   const handleReject = async (advance: EmployeeAdvance) => {
-    if (!can("employees", "edit")) {
+    if (!can("employeeAdvances", "approve")) {
       toast({
         title: "غير مصرح",
         description: "ليس لديك صلاحية لرفض السُلف",
@@ -253,7 +283,7 @@ const EmployeeAdvances = () => {
     }
   };
 
-  if (!can("employees", "view")) {
+  if (!can("employeeAdvances", "view")) {
     return (
       <div className="min-h-screen bg-background" dir="rtl">
         <POSHeader />
@@ -278,7 +308,7 @@ const EmployeeAdvances = () => {
             <Wallet className="h-8 w-8" />
             سُلف الموظفين
           </h1>
-          {can("employees", "create") && (
+          {can("employeeAdvances", "create") && (
             <Button onClick={() => setDialogOpen(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               سُلفة جديدة
@@ -379,7 +409,7 @@ const EmployeeAdvances = () => {
                     </TableCell>
                     <TableCell>
                       {advance.status === "pending" &&
-                        can("employees", "edit") && (
+                        can("employeeAdvances", "approve") && (
                           <div className="flex gap-2">
                             <Button
                               size="sm"

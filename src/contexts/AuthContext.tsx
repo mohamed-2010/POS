@@ -27,6 +27,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await db.init();
       await db.initDefaultData();
       await db.initializeDefaultRoles(); // تهيئة الأدوار الافتراضية
+      await db.migrateRolesPermissions(); // تحديث الصلاحيات للأدوار الموجودة
       await db.migrateToV12(); // Migration للبيانات القديمة
 
       // التحقق من وجود مستخدم مسجل مسبقاً

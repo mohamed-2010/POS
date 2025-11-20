@@ -238,35 +238,119 @@ const Employees = () => {
   const handlePaySalary = async (employee: Employee) => {
     if (
       !confirm(
-        `هل تريد تأكيد صرف راتب ${employee.name}؟\n\nسيتم تحويل كل الخصومات لمرة واحدة إلى "مكتملة".`
+        `هل تريد تأكيد صرف راتب ${employee.name}؟\n\nسيتم تحويل كل الخصومات لمرة واحدة إلى "مكتملة" وسيتم تحديث رصيد السُلف.`
       )
     ) {
       return;
     }
 
-    // تحويل الخصومات لمرة واحدة للموظف إلى completed
-    const employeeOneTimeDeductions = deductions.filter(
-      (d) =>
-        d.employeeId === employee.id &&
-        d.type === "oneTime" &&
-        d.status === "active"
-    );
+    try {
+      // 1. تحويل الخصومات لمرة واحدة للموظف إلى completed
+      const employeeOneTimeDeductions = deductions.filter(
+        (d) =>
+          d.employeeId === employee.id &&
+          d.type === "oneTime" &&
+          d.status === "active"
+      );
 
-    for (const deduction of employeeOneTimeDeductions) {
-      const updated: EmployeeDeduction = {
-        ...deduction,
-        status: "completed",
-        updatedAt: new Date().toISOString(),
-      };
-      await db.update("employeeDeductions", updated);
+      for (const deduction of employeeOneTimeDeductions) {
+        const updated: EmployeeDeduction = {
+          ...deduction,
+          status: "completed",
+          updatedAt: new Date().toISOString(),
+        };
+        await db.update("employeeDeductions", updated);
+      }
+
+      // 2. تحديث السُلف المعتمدة: خصم المبلغ الشهري من المتبقي
+      const employeeApprovedAdvances = advances.filter(
+        (adv) => adv.employeeId === employee.id && adv.status === "approved"
+      );
+
+      let updatedAdvancesCount = 0;
+      let completedAdvancesCount = 0;
+      const completedAdvanceDeductions: string[] = []; // لتخزين معرفات الخصومات التي يجب إلغائها
+
+      for (const advance of employeeApprovedAdvances) {
+        const deductionAmount = advance.deductionAmount || 0;
+        if (deductionAmount > 0) {
+          const currentPaid = advance.paidAmount || 0;
+          const newPaid = currentPaid + deductionAmount;
+          const remaining = advance.amount - newPaid;
+
+          if (remaining <= 0) {
+            // السُلفة تم سدادها بالكامل
+            const updated: EmployeeAdvance = {
+              ...advance,
+              status: "paid",
+              paidAmount: advance.amount,
+              remainingAmount: 0,
+              updatedAt: new Date().toISOString(),
+            };
+            await db.update("employeeAdvances", updated);
+            completedAdvancesCount++;
+
+            // إلغاء الخصم التلقائي المرتبط بهذه السلفة
+            const relatedDeductions = deductions.filter(
+              (d) =>
+                d.employeeId === employee.id &&
+                d.status === "active" &&
+                d.notes?.includes(advance.id)
+            );
+            completedAdvanceDeductions.push(
+              ...relatedDeductions.map((d) => d.id)
+            );
+          } else {
+            // لا زال هناك رصيد متبقي
+            const updated: EmployeeAdvance = {
+              ...advance,
+              paidAmount: newPaid,
+              remainingAmount: remaining,
+              updatedAt: new Date().toISOString(),
+            };
+            await db.update("employeeAdvances", updated);
+            updatedAdvancesCount++;
+          }
+        }
+      }
+
+      // 3. إلغاء الخصومات التلقائية للسُلف المكتملة
+      for (const deductionId of completedAdvanceDeductions) {
+        const deduction = deductions.find((d) => d.id === deductionId);
+        if (deduction) {
+          const updated: EmployeeDeduction = {
+            ...deduction,
+            status: "completed",
+            updatedAt: new Date().toISOString(),
+          };
+          await db.update("employeeDeductions", updated);
+        }
+      }
+
+      let message = `تم صرف راتب ${employee.name}`;
+      if (employeeOneTimeDeductions.length > 0) {
+        message += `\n✓ تم معالجة ${employeeOneTimeDeductions.length} خصم لمرة واحدة`;
+      }
+      if (updatedAdvancesCount > 0) {
+        message += `\n✓ تم تحديث ${updatedAdvancesCount} سُلفة`;
+      }
+      if (completedAdvancesCount > 0) {
+        message += `\n✓ تم إتمام سداد ${completedAdvancesCount} سُلفة بالكامل`;
+      }
+
+      toast({
+        title: "تم صرف الراتب بنجاح",
+        description: message,
+      });
+
+      loadEmployees();
+    } catch (error) {
+      console.error("Error paying salary:", error);
+      toast({
+        title: "خطأ في صرف الراتب",
+        variant: "destructive",
+      });
     }
-
-    toast({
-      title: "تم صرف الراتب بنجاح",
-      description: `تم صرف راتب ${employee.name} ومعالجة ${employeeOneTimeDeductions.length} خصم`,
-    });
-
-    loadEmployees();
   };
 
   const handleEdit = async (employee: Employee) => {

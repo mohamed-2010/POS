@@ -246,20 +246,33 @@ export const CheckoutDialog = ({
 
       // تحديث الوردية الحالية (استخدام نفس currentShift من الأعلى)
       if (currentShift) {
+        // حساب المبالغ حسب طريقة الدفع
+        let cashAmount = 0;
+        let cardAmount = 0;
+        let walletAmount = 0;
+
+        for (const pm of selectedPaymentMethods) {
+          const method = paymentMethods.find((m) => m.id === pm.id);
+          if (method?.type === "cash") {
+            cashAmount += pm.amount;
+          } else if (
+            method?.type === "visa" ||
+            method?.type === "bank_transfer"
+          ) {
+            cardAmount += pm.amount;
+          } else if (method?.type === "wallet") {
+            walletAmount += pm.amount;
+          }
+        }
+
         const updatedShift: Shift = {
           ...currentShift,
           sales: {
             totalInvoices: currentShift.sales.totalInvoices + 1,
             totalAmount: currentShift.sales.totalAmount + total,
-            cashSales:
-              currentShift.sales.cashSales +
-              (paymentMethod === "cash" ? total : 0),
-            cardSales:
-              currentShift.sales.cardSales +
-              (paymentMethod === "card" ? total : 0),
-            walletSales:
-              currentShift.sales.walletSales +
-              (paymentMethod === "wallet" ? total : 0),
+            cashSales: currentShift.sales.cashSales + cashAmount,
+            cardSales: currentShift.sales.cardSales + cardAmount,
+            walletSales: currentShift.sales.walletSales + walletAmount,
             returns: currentShift.sales.returns,
           },
         };

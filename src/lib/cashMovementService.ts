@@ -160,6 +160,7 @@ export async function getShiftCashSummary(shiftId: number): Promise<{
   salesCash: number;
   cashIn: number;
   cashOut: number;
+  expenses: number;
   expectedCash: number;
   actualCash?: number;
   difference?: number;
@@ -173,11 +174,19 @@ export async function getShiftCashSummary(shiftId: number): Promise<{
 
   const cashMovements = await getCashMovementsSummary(shiftId);
 
+  // Get expenses for this shift
+  const allExpenses = await db.getAll<any>("expenses");
+  const shiftExpenses = allExpenses.filter(
+    (e) => e.shiftId === shiftId.toString() || e.shiftId === shiftId
+  );
+  const totalExpenses = shiftExpenses.reduce((sum, e) => sum + e.amount, 0);
+
   const expectedCash =
     shift.startingCash +
     shift.sales.cashSales +
     cashMovements.totalIn -
     cashMovements.totalOut -
+    totalExpenses -
     shift.sales.returns; // assuming returns are in cash
 
   return {
@@ -185,6 +194,7 @@ export async function getShiftCashSummary(shiftId: number): Promise<{
     salesCash: shift.sales.cashSales,
     cashIn: cashMovements.totalIn,
     cashOut: cashMovements.totalOut,
+    expenses: totalExpenses,
     expectedCash,
     actualCash: shift.actualCash,
     difference: shift.difference,

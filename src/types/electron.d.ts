@@ -40,6 +40,32 @@ declare global {
       invoices: any;
       settings: any;
       reports: any;
+      printer: {
+        getPrinters: () => Promise<
+          Array<{
+            name: string;
+            displayName: string;
+            description?: string;
+            status?: number;
+            isDefault?: boolean;
+            options?: any;
+          }>
+        >;
+        print: (html: string, options: any) => Promise<void>;
+      };
+      file: {
+        saveDialog: (options: {
+          defaultPath: string;
+          filters?: any[];
+          content: string;
+        }) => Promise<{
+          success: boolean;
+          canceled?: boolean;
+          filePath?: string;
+          fileName?: string;
+          error?: string;
+        }>;
+      };
     };
   }
 }

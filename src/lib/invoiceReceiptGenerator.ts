@@ -296,7 +296,7 @@ export class InvoiceReceiptGenerator {
                 item.priceTypeName
                   ? `
               <tr>
-                <td colspan="4" class="item-name" style="font-size: 9px; color: #666;">
+                <td colspan="4" class="item-name" style="font-size: 9px;">
                   نوع السعر: ${item.priceTypeName}
                 </td>
               </tr>
@@ -316,6 +316,16 @@ export class InvoiceReceiptGenerator {
             <span>المجموع الفرعي:</span>
             <span>${invoice.subtotal.toFixed(2)} جنيه</span>
           </div>
+          ${
+            invoice.discount > 0
+              ? `
+          <div class="row" style="color: #000;">
+            <span>الخصم:</span>
+            <span>-${invoice.discount.toFixed(2)} جنيه</span>
+          </div>
+          `
+              : ""
+          }
           ${
             invoice.tax > 0
               ? `

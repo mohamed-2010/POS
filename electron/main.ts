@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 import "./crypto-polyfill.js"; // Must be imported BEFORE whatsappHandler
 import { registerWhatsAppHandlers } from "./whatsappHandler.js";
 
@@ -248,6 +249,50 @@ if (!gotTheLock) {
       } catch (error) {
         console.error("Print error:", error);
         throw error;
+      }
+    }
+  );
+
+  // ==================== File Save Dialog ====================
+
+  // Show save dialog and save file
+  ipcMain.handle(
+    "file:save-dialog",
+    async (
+      _event,
+      options: { defaultPath: string; filters?: any[]; content: string }
+    ) => {
+      try {
+        if (!mainWindow) {
+          throw new Error("Main window not available");
+        }
+
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: options.defaultPath,
+          filters: options.filters || [
+            { name: "Excel Files", extensions: ["xlsx"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        });
+
+        if (result.canceled || !result.filePath) {
+          return { success: false, canceled: true };
+        }
+
+        // Save the file
+        fs.writeFileSync(result.filePath, options.content, "utf8");
+
+        return {
+          success: true,
+          filePath: result.filePath,
+          fileName: path.basename(result.filePath),
+        };
+      } catch (error: any) {
+        console.error("Save file error:", error);
+        return {
+          success: false,
+          error: error.message,
+        };
       }
     }
   );

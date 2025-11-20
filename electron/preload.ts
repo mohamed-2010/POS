@@ -44,6 +44,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     print: (html: string, options: any) =>
       ipcRenderer.invoke("printer:print-thermal", html, options),
   },
+
+  // File System APIs
+  file: {
+    saveDialog: (options: {
+      defaultPath: string;
+      filters?: any[];
+      content: string;
+    }) => ipcRenderer.invoke("file:save-dialog", options),
+  },
 });
 
 // تعريف الأنواع لـ TypeScript
@@ -94,6 +103,19 @@ declare global {
           }>
         >;
         print: (html: string, options: any) => Promise<void>;
+      };
+      file: {
+        saveDialog: (options: {
+          defaultPath: string;
+          filters?: any[];
+          content: string;
+        }) => Promise<{
+          success: boolean;
+          canceled?: boolean;
+          filePath?: string;
+          fileName?: string;
+          error?: string;
+        }>;
       };
     };
   }

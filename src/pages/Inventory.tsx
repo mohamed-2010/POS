@@ -22,6 +22,7 @@ import {
   ProductCategory,
   Unit,
   PriceType,
+  ProductUnit,
 } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,6 +66,18 @@ const Inventory = () => {
   const [imagePreview, setImagePreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // State للوحدات المتعددة
+  const [productUnits, setProductUnits] = useState<any[]>([]);
+  const [showUnitsDialog, setShowUnitsDialog] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<any | null>(null);
+  const [unitFormData, setUnitFormData] = useState({
+    unitId: "",
+    conversionFactor: 1,
+    prices: {} as Record<string, number>,
+    costPrice: 0,
+    barcode: "",
+  });
 
   const [formData, setFormData] = useState({
     name: "",
@@ -205,7 +218,7 @@ const Inventory = () => {
     }
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = async (product: Product) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -226,6 +239,10 @@ const Inventory = () => {
     if (product.imageUrl) {
       setImagePreview(product.imageUrl);
     }
+
+    // تحميل وحدات المنتج
+    await loadProductUnits(product.id);
+
     setDialogOpen(true);
   };
 
@@ -263,6 +280,107 @@ const Inventory = () => {
     setEditingProduct(null);
     setImagePreview("");
     setDialogOpen(false);
+  };
+
+  // ============ دوال إدارة الوحدات المتعددة ============
+
+  const loadProductUnits = async (productId: string) => {
+    const allUnits = await db.getAll<ProductUnit>("productUnits");
+    const filtered = allUnits.filter((u) => u.productId === productId);
+    setProductUnits(filtered);
+  };
+
+  const handleAddUnit = () => {
+    setEditingUnit(null);
+    setUnitFormData({
+      unitId: "",
+      conversionFactor: 1,
+      prices: {},
+      costPrice: 0,
+      barcode: "",
+    });
+    setShowUnitsDialog(true);
+  };
+
+  const handleEditUnit = (unit: any) => {
+    setEditingUnit(unit);
+    setUnitFormData({
+      unitId: unit.unitId,
+      conversionFactor: unit.conversionFactor,
+      prices: unit.prices || {},
+      costPrice: unit.costPrice || 0,
+      barcode: unit.barcode || "",
+    });
+    setShowUnitsDialog(true);
+  };
+
+  const handleSaveUnit = async () => {
+    if (!editingProduct) {
+      toast({ title: "يجب حفظ المنتج أولاً", variant: "destructive" });
+      return;
+    }
+
+    if (!unitFormData.unitId || unitFormData.conversionFactor <= 0) {
+      toast({ title: "يرجى ملء جميع الحقول المطلوبة", variant: "destructive" });
+      return;
+    }
+
+    const selectedUnit = units.find((u) => u.id === unitFormData.unitId);
+    if (!selectedUnit) return;
+
+    try {
+      if (editingUnit) {
+        // تعديل وحدة موجودة
+        const updated: ProductUnit = {
+          ...editingUnit,
+          unitId: unitFormData.unitId,
+          unitName: selectedUnit.name,
+          conversionFactor: unitFormData.conversionFactor,
+          prices: unitFormData.prices,
+          costPrice: unitFormData.costPrice,
+          barcode: unitFormData.barcode,
+        };
+        await db.update("productUnits", updated);
+        toast({ title: "✅ تم تحديث الوحدة بنجاح" });
+      } else {
+        // إضافة وحدة جديدة
+        const newUnit: ProductUnit = {
+          id: `${editingProduct.id}_${unitFormData.unitId}_${Date.now()}`,
+          productId: editingProduct.id,
+          unitId: unitFormData.unitId,
+          unitName: selectedUnit.name,
+          conversionFactor: unitFormData.conversionFactor,
+          prices: unitFormData.prices,
+          costPrice: unitFormData.costPrice,
+          barcode: unitFormData.barcode,
+          isBaseUnit: unitFormData.conversionFactor === 1,
+          createdAt: new Date().toISOString(),
+        };
+        await db.add("productUnits", newUnit);
+        toast({ title: "✅ تم إضافة الوحدة بنجاح" });
+      }
+
+      await loadProductUnits(editingProduct.id);
+      setShowUnitsDialog(false);
+    } catch (error) {
+      console.error("Error saving unit:", error);
+      toast({ title: "خطأ في حفظ الوحدة", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteUnit = async (unitId: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذه الوحدة؟")) return;
+
+    try {
+      await db.delete("productUnits", unitId);
+      toast({ title: "✅ تم حذف الوحدة بنجاح" });
+      if (editingProduct) {
+        await loadProductUnits(editingProduct.id);
+      }
+    } catch (error) {
+      console.error("Error deleting unit:", error);
+      toast({ title: "خطأ في حذف الوحدة", variant: "destructive" });
+    }
   };
 
   // تصدير المنتجات إلى Excel
@@ -498,11 +616,7 @@ const Inventory = () => {
               <Calculator className="h-4 w-4" />
               جرد المخزون
             </Button>
-            <Button
-              onClick={exportToExcel}
-              variant="outline"
-              className="gap-2"
-            >
+            <Button onClick={exportToExcel} variant="outline" className="gap-2">
               <Download className="h-4 w-4" />
               تصدير
             </Button>
@@ -586,7 +700,10 @@ const Inventory = () => {
           {filteredProducts.map((product) => {
             const status = getStockStatus(product);
             return (
-              <Card key={product.id} className="p-4 hover:shadow-lg transition-shadow">
+              <Card
+                key={product.id}
+                className="p-4 hover:shadow-lg transition-shadow"
+              >
                 {product.imageUrl && (
                   <div className="mb-3 rounded-lg overflow-hidden h-32 bg-gray-100">
                     <img
@@ -667,7 +784,10 @@ const Inventory = () => {
 
         {/* Add/Edit Product Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            dir="rtl"
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          >
             <DialogHeader>
               <DialogTitle>
                 {editingProduct ? "تعديل منتج" : "إضافة منتج جديد"}
@@ -675,9 +795,12 @@ const Inventory = () => {
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <Tabs defaultValue="basic" dir="rtl">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="basic">المعلومات الأساسية</TabsTrigger>
                   <TabsTrigger value="pricing">الأسعار والصورة</TabsTrigger>
+                  <TabsTrigger value="units" disabled={!editingProduct}>
+                    الوحدات المتعددة {!editingProduct && "(احفظ المنتج أولاً)"}
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4">
@@ -912,6 +1035,117 @@ const Inventory = () => {
                     </Label>
                   </div>
                 </TabsContent>
+
+                {/* Tab: الوحدات المتعددة */}
+                <TabsContent value="units" className="space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">وحدات المنتج</h3>
+                    <Button
+                      type="button"
+                      onClick={handleAddUnit}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      إضافة وحدة
+                    </Button>
+                  </div>
+
+                  {productUnits.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>لا توجد وحدات مضافة</p>
+                      <p className="text-sm">
+                        اضغط "إضافة وحدة" لإضافة وحدة جديدة
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {productUnits.map((unit) => (
+                        <Card key={unit.id} className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">{unit.unitName}</Badge>
+                                {unit.isBaseUnit && (
+                                  <Badge variant="secondary">وحدة أساسية</Badge>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">
+                                    عدد الوحدات:{" "}
+                                  </span>
+                                  <span className="font-semibold">
+                                    {unit.conversionFactor}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">
+                                    التكلفة:{" "}
+                                  </span>
+                                  <span className="font-semibold">
+                                    {unit.costPrice} {currency}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">
+                                  الأسعار:{" "}
+                                </span>
+                                <div className="mt-1 space-y-1">
+                                  {priceTypes.map((pt) => (
+                                    <div
+                                      key={pt.id}
+                                      className="flex justify-between"
+                                    >
+                                      <span>{pt.name}:</span>
+                                      <span className="font-semibold">
+                                        {unit.prices?.[pt.id] || 0} {currency}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {unit.barcode && (
+                                <div className="text-sm">
+                                  <span className="text-muted-foreground">
+                                    الباركود:{" "}
+                                  </span>
+                                  <span className="font-mono">
+                                    {unit.barcode}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditUnit(unit)}
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteUnit(unit.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6">
@@ -925,7 +1159,10 @@ const Inventory = () => {
         </Dialog>
 
         {/* Inventory Report Dialog */}
-        <Dialog open={inventoryDialogOpen} onOpenChange={setInventoryDialogOpen}>
+        <Dialog
+          open={inventoryDialogOpen}
+          onOpenChange={setInventoryDialogOpen}
+        >
           <DialogContent dir="rtl" className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -980,9 +1217,7 @@ const Inventory = () => {
                   </div>
                   <div className="flex justify-between items-center">
                     <span>منتجات قليلة</span>
-                    <Badge variant="default">
-                      {inventoryStats.lowStock}
-                    </Badge>
+                    <Badge variant="default">{inventoryStats.lowStock}</Badge>
                   </div>
                   <div className="flex justify-between items-center">
                     <span>منتجات متوفرة</span>
@@ -1013,6 +1248,146 @@ const Inventory = () => {
               <Button onClick={exportToExcel}>
                 <Download className="h-4 w-4 ml-2" />
                 تصدير التقرير
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog: إضافة/تعديل وحدة */}
+        <Dialog open={showUnitsDialog} onOpenChange={setShowUnitsDialog}>
+          <DialogContent dir="rtl" className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                {editingUnit ? "تعديل وحدة" : "إضافة وحدة جديدة"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label>الوحدة *</Label>
+                <Select
+                  value={unitFormData.unitId}
+                  onValueChange={(value) =>
+                    setUnitFormData({ ...unitFormData, unitId: value })
+                  }
+                  disabled={!!editingUnit}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الوحدة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {unit.name} ({unit.symbol})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>عدد الوحدات (Conversion Factor) *</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={unitFormData.conversionFactor}
+                  onChange={(e) =>
+                    setUnitFormData({
+                      ...unitFormData,
+                      conversionFactor: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  placeholder="مثال: 10 (لو كرتونة = 10 قطع)"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  عدد القطع في هذه الوحدة
+                </p>
+              </div>
+
+              <div>
+                <Label>سعر التكلفة *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={unitFormData.costPrice}
+                  onChange={(e) =>
+                    setUnitFormData({
+                      ...unitFormData,
+                      costPrice: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div className="space-y-3 p-4 border rounded-lg">
+                <Label className="font-semibold">أسعار البيع *</Label>
+                {priceTypes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    لا توجد أنواع تسعير. يرجى إضافة نوع سعر واحد على الأقل من
+                    إعدادات النظام.
+                  </p>
+                ) : (
+                  priceTypes.map((priceType) => (
+                    <div key={priceType.id}>
+                      <Label className="text-sm">
+                        {priceType.name}
+                        {priceType.isDefault && (
+                          <Badge variant="outline" className="mr-2 text-xs">
+                            افتراضي
+                          </Badge>
+                        )}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={unitFormData.prices[priceType.id] || ""}
+                        onChange={(e) =>
+                          setUnitFormData({
+                            ...unitFormData,
+                            prices: {
+                              ...unitFormData.prices,
+                              [priceType.id]: parseFloat(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        placeholder="0.00"
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div>
+                <Label>الباركود (اختياري)</Label>
+                <Input
+                  value={unitFormData.barcode}
+                  onChange={(e) =>
+                    setUnitFormData({
+                      ...unitFormData,
+                      barcode: e.target.value,
+                    })
+                  }
+                  placeholder="باركود خاص بهذه الوحدة"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowUnitsDialog(false)}
+              >
+                إلغاء
+              </Button>
+              <Button type="button" onClick={handleSaveUnit}>
+                حفظ الوحدة
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -50,9 +50,21 @@ All colors MUST be HSL.
     --warning-foreground: 0 0% 100%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(152 65% 25%), hsl(152 70% 35%));
-    --gradient-secondary: linear-gradient(135deg, hsl(215 85% 55%), hsl(215 85% 65%));
-    --gradient-success: linear-gradient(135deg, hsl(152 65% 35%), hsl(152 70% 45%));
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(152 65% 25%),
+      hsl(152 70% 35%)
+    );
+    --gradient-secondary: linear-gradient(
+      135deg,
+      hsl(215 85% 55%),
+      hsl(215 85% 65%)
+    );
+    --gradient-success: linear-gradient(
+      135deg,
+      hsl(152 65% 35%),
+      hsl(152 70% 45%)
+    );
 
     /* Shadows */
     --shadow-sm: 0 2px 4px -1px hsl(0 0% 0% / 0.06);
@@ -112,9 +124,21 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 222.2 47% 11%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(152 70% 45%), hsl(152 70% 55%));
-    --gradient-secondary: linear-gradient(135deg, hsl(215 85% 60%), hsl(215 85% 70%));
-    --gradient-success: linear-gradient(135deg, hsl(152 70% 45%), hsl(152 70% 55%));
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(152 70% 45%),
+      hsl(152 70% 55%)
+    );
+    --gradient-secondary: linear-gradient(
+      135deg,
+      hsl(215 85% 60%),
+      hsl(215 85% 70%)
+    );
+    --gradient-success: linear-gradient(
+      135deg,
+      hsl(152 70% 45%),
+      hsl(152 70% 55%)
+    );
 
     --shadow-sm: 0 2px 4px -1px hsl(0 0% 0% / 0.3);
     --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.4);
@@ -152,6 +176,14 @@ All colors MUST be HSL.
   /* Smooth animations */
   * {
     transition: var(--transition-fast);
+  }
+
+  /* إصلاح مشكلة Input freeze - التأكد من أن inputs دائماً قابلة للنقر */
+  input,
+  textarea,
+  select {
+    pointer-events: auto !important;
+    user-select: text !important;
   }
 
   /* Custom scrollbar */

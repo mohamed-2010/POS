@@ -141,7 +141,11 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Dialog إجباري لبدء الوردية */}
-      <Dialog open={showShiftDialog} onOpenChange={() => {}}>
+      <Dialog
+        open={showShiftDialog}
+        onOpenChange={setShowShiftDialog}
+        modal={true}
+      >
         <DialogContent
           dir="rtl"
           onPointerDownOutside={(e) => e.preventDefault()}

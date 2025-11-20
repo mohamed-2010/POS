@@ -44,6 +44,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { db, Shift } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
+import { ZReportDialog } from "@/components/ZReportDialog";
+import { useShift } from "@/contexts/ShiftContext";
 
 export const POSHeader = () => {
   const navigate = useNavigate();
@@ -51,34 +53,30 @@ export const POSHeader = () => {
   const { user, logout } = useAuth();
   const { getSetting } = useSettingsContext();
   const { toast } = useToast();
+  const { currentShift, refreshShift } = useShift(); // استخدام ShiftContext
   const [menuOpen, setMenuOpen] = useState(false);
-  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("");
-  const [closeShiftDialogOpen, setCloseShiftDialogOpen] = useState(false);
-  const [actualCashInDrawer, setActualCashInDrawer] = useState("");
+  const [zReportOpen, setZReportOpen] = useState(false);
   const [dailySummaryDialogOpen, setDailySummaryDialogOpen] = useState(false);
   const [dailySummary, setDailySummary] = useState<any>(null);
 
   const storeName = getSetting("storeName") || "نظام نقاط البيع";
 
-  useEffect(() => {
-    loadCurrentShift();
-  }, []);
+  // حذفنا useEffect و loadCurrentShift لأننا بنستخدم ShiftContext
 
-  // معالج إغلاق النافذة/البرنامج
+  // معالج إغلاق التطبيق - منع الإغلاق إذا كانت هناك وردية مفتوحة
   useEffect(() => {
+    if (!currentShift || currentShift.status !== "active") return;
+
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // إذا كانت هناك وردية مفتوحة، اعرض تحذير
-      if (currentShift && currentShift.status === "active") {
-        e.preventDefault();
-        e.returnValue = "لديك وردية مفتوحة. هل تريد المتابعة؟";
+      e.preventDefault();
+      e.returnValue = "";
 
-        // فتح dialog لإغلاق الوردية
-        setCloseShiftDialogOpen(true);
+      // فتح ZReportDialog عند محاولة الإغلاق
+      setZReportOpen(true);
 
-        return "لديك وردية مفتوحة. هل تريد المتابعة؟";
-      }
+      return "";
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -87,13 +85,6 @@ export const POSHeader = () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [currentShift]);
-
-  const loadCurrentShift = async () => {
-    await db.init();
-    const shifts = await db.getAll<Shift>("shifts");
-    const activeShift = shifts.find((s) => s.status === "active");
-    setCurrentShift(activeShift || null);
-  };
 
   const handleStartShift = async () => {
     if (!user) return;
@@ -119,7 +110,7 @@ export const POSHeader = () => {
       };
 
       await db.add("shifts", newShift);
-      setCurrentShift(newShift);
+      await refreshShift(); // تحديث الوردية من ShiftContext
       setShiftDialogOpen(false);
       setOpeningBalance("");
       toast({
@@ -138,27 +129,37 @@ export const POSHeader = () => {
   const handleEndShift = async () => {
     if (!currentShift) return;
 
-    const confirmed = confirm(
-      "هل أنت متأكد من إنهاء الوردية؟\nسيتم حساب جميع المعاملات تلقائياً."
-    );
+    // فتح ZReportDialog بدلاً من confirm
+    setZReportOpen(true);
+  };
 
-    if (!confirmed) return;
+  const handleCloseShiftFromZReport = async (
+    actualCash: number,
+    denominations: any
+  ) => {
+    if (!currentShift || !user) return;
 
     try {
-      // حساب المبيعات والمصروفات
+      // حساب المبيعات والمصروفات بشكل ديناميكي من الفواتير
       const invoices = await db.getAll<any>("invoices");
       const expenses = await db.getAll<any>("expenses");
-      const deposits = await db.getAll<any>("deposits");
+      const cashMovements = await db.getAll<any>("cashMovements");
       const paymentMethods = await db.getAll<any>("paymentMethods");
 
       const shiftInvoices = invoices.filter(
-        (inv: any) => inv.shiftId === currentShift.id
+        (inv: any) =>
+          inv.shiftId === currentShift.id ||
+          inv.shiftId === currentShift.id.toString()
       );
       const shiftExpenses = expenses.filter(
-        (exp: any) => exp.shiftId === currentShift.id
+        (exp: any) =>
+          exp.shiftId === currentShift.id ||
+          exp.shiftId === currentShift.id.toString()
       );
-      const shiftDeposits = deposits.filter(
-        (dep: any) => dep.shiftId === currentShift.id
+      const shiftMovements = cashMovements.filter(
+        (m: any) =>
+          m.shiftId === currentShift.id ||
+          m.shiftId === currentShift.id.toString()
       );
 
       const totalSales = shiftInvoices.reduce(
@@ -169,51 +170,108 @@ export const POSHeader = () => {
         (sum: number, exp: any) => sum + (exp.amount || 0),
         0
       );
-      const totalDeposits = shiftDeposits.reduce(
-        (sum: number, dep: any) => sum + (dep.amount || 0),
-        0
-      );
 
-      // حساب طرق الدفع بشكل صحيح
+      const cashIn = shiftMovements
+        .filter((m: any) => m.type === "in")
+        .reduce((sum: number, m: any) => sum + m.amount, 0);
+      const cashOut = shiftMovements
+        .filter((m: any) => m.type === "out")
+        .reduce((sum: number, m: any) => sum + m.amount, 0);
+
+      // حساب طرق الدفع بشكل ديناميكي من الفواتير
       let cashSales = 0;
       let cardSales = 0;
       let walletSales = 0;
+      let returns = 0;
 
       shiftInvoices.forEach((inv: any) => {
-        // النظام الجديد - split payments
-        if (inv.paymentMethodAmounts && inv.paymentMethodIds) {
-          inv.paymentMethodIds.forEach((methodId: string) => {
-            const amount = inv.paymentMethodAmounts[methodId] || 0;
-            const method = paymentMethods.find((pm: any) => pm.id === methodId);
+        // التعامل مع الفواتير الجديدة التي تحتوي على paymentMethodAmounts
+        if (
+          inv.paymentMethodAmounts &&
+          Object.keys(inv.paymentMethodAmounts).length > 0
+        ) {
+          Object.entries(inv.paymentMethodAmounts).forEach(
+            ([methodId, amount]: [string, any]) => {
+              const method = paymentMethods.find(
+                (pm: any) => pm.id === methodId || pm.id === methodId.toString()
+              );
 
-            if (method) {
-              if (method.type === "cash") {
-                cashSales += amount;
-              } else if (method.type === "card") {
-                cardSales += amount;
-              } else if (method.type === "wallet") {
-                walletSales += amount;
+              let type = method?.type;
+              if (!type) {
+                const methodIdLower = methodId.toLowerCase();
+                if (
+                  methodIdLower.includes("cash") ||
+                  methodIdLower === "نقدي"
+                ) {
+                  type = "cash";
+                } else if (
+                  methodIdLower.includes("visa") ||
+                  methodIdLower.includes("card") ||
+                  methodIdLower.includes("بطاقة") ||
+                  methodIdLower.includes("bank")
+                ) {
+                  type = "card";
+                } else if (
+                  methodIdLower.includes("wallet") ||
+                  methodIdLower.includes("محفظة")
+                ) {
+                  type = "wallet";
+                }
               }
-            } else {
-              cashSales += amount;
+
+              const amountValue = parseFloat(amount) || 0;
+              if (type === "cash") {
+                cashSales += amountValue;
+              } else if (
+                type === "card" ||
+                type === "visa" ||
+                type === "bank_transfer"
+              ) {
+                cardSales += amountValue;
+              } else if (type === "wallet") {
+                walletSales += amountValue;
+              }
             }
-          });
-        }
-        // النظام القديم
-        else if (inv.paymentType === "cash") {
+          );
+        } else if (inv.paymentType) {
+          const total = inv.total || 0;
+          if (inv.paymentType === "cash" || inv.paymentType === "نقدي") {
+            cashSales += total;
+          } else if (
+            inv.paymentType === "card" ||
+            inv.paymentType === "visa" ||
+            inv.paymentType === "بطاقة"
+          ) {
+            cardSales += total;
+          } else if (
+            inv.paymentType === "wallet" ||
+            inv.paymentType === "محفظة"
+          ) {
+            walletSales += total;
+          }
+        } else {
           cashSales += inv.total || 0;
         }
+
+        if (inv.returns) returns += inv.returns;
       });
 
       const expectedCash =
-        currentShift.startingCash + cashSales - totalExpenses - totalDeposits;
+        currentShift.startingCash +
+        cashSales +
+        cashIn -
+        cashOut -
+        totalExpenses -
+        returns;
+
+      const difference = actualCash - expectedCash;
 
       const updatedShift: Shift = {
         ...currentShift,
         endTime: new Date().toISOString(),
         expectedCash,
-        actualCash: expectedCash,
-        difference: 0,
+        actualCash: actualCash,
+        difference: difference,
         status: "closed",
         closedBy: user?.name || "غير معروف",
         sales: {
@@ -222,48 +280,45 @@ export const POSHeader = () => {
           cashSales,
           cardSales,
           walletSales,
-          returns: 0,
+          returns,
         },
+        expenses: totalExpenses,
       };
 
       await db.update("shifts", updatedShift);
-      setCurrentShift(null);
+      await refreshShift();
+      setZReportOpen(false);
+
+      // تسجيل الخروج بعد إغلاق الوردية
       toast({
-        title: "تم إنهاء الوردية بنجاح",
+        title: "تم إغلاق الوردية بنجاح",
         description: `إجمالي المبيعات: ${totalSales.toFixed(2)} جنيه`,
       });
+
+      // الانتظار قليلاً ثم تسجيل الخروج
+      setTimeout(() => {
+        logout();
+        navigate("/login");
+      }, 1500);
     } catch (error) {
+      console.error("Error closing shift:", error);
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء إنهاء الوردية",
+        description: "حدث خطأ أثناء إغلاق الوردية",
         variant: "destructive",
       });
     }
   };
 
   const handleLogout = () => {
-    // إذا كان هناك وردية مفتوحة، اعرض نافذة الإغلاق
+    // إذا كان هناك وردية مفتوحة، اعرض ZReportDialog
     if (currentShift && currentShift.status === "active") {
-      setCloseShiftDialogOpen(true);
+      setZReportOpen(true);
     } else {
       // لا توجد وردية مفتوحة، قم بتسجيل الخروج مباشرة
       logout();
       navigate("/login");
     }
-  };
-
-  const handleConfirmLogout = async (closeShift: boolean) => {
-    if (closeShift && currentShift) {
-      try {
-        await handleEndShift();
-      } catch (error) {
-        console.error("Error closing shift:", error);
-      }
-    }
-
-    setCloseShiftDialogOpen(false);
-    logout();
-    navigate("/login");
   };
 
   const loadDailySummary = async () => {
@@ -309,49 +364,59 @@ export const POSHeader = () => {
       0
     );
 
-    // حساب طرق الدفع بشكل صحيح
-    let cashSales = 0;
-    let cardSales = 0;
-    let walletSales = 0;
+    // حساب المبيعات لكل طريقة دفع بشكل ديناميكي
+    const paymentMethodSales: {
+      [key: string]: { name: string; amount: number };
+    } = {};
+
+    // تهيئة جميع طرق الدفع بقيمة 0
+    paymentMethods.forEach((method: any) => {
+      paymentMethodSales[method.id] = {
+        name: method.name,
+        amount: 0,
+      };
+    });
 
     todayInvoices.forEach((inv: any) => {
       // النظام الجديد - split payments
-      if (inv.paymentMethodAmounts && inv.paymentMethodIds) {
-        inv.paymentMethodIds.forEach((methodId: string) => {
-          const amount = inv.paymentMethodAmounts[methodId] || 0;
-          const method = paymentMethods.find((pm: any) => pm.id === methodId);
+      if (
+        inv.paymentMethodAmounts &&
+        Object.keys(inv.paymentMethodAmounts).length > 0
+      ) {
+        Object.entries(inv.paymentMethodAmounts).forEach(
+          ([methodId, amount]: [string, any]) => {
+            const amountValue = parseFloat(amount) || 0;
 
-          if (method) {
-            // تصنيف حسب نوع طريقة الدفع
-            if (method.type === "cash") {
-              cashSales += amount;
-            } else if (method.type === "card") {
-              cardSales += amount;
-            } else if (method.type === "wallet") {
-              walletSales += amount;
+            if (paymentMethodSales[methodId]) {
+              paymentMethodSales[methodId].amount += amountValue;
+            } else {
+              // إذا لم نجد الطريقة في النظام، نضيفها كطريقة مؤقتة
+              const method = inv.paymentMethods?.find?.(
+                (pm: any) => pm.id === methodId
+              );
+              paymentMethodSales[methodId] = {
+                name: method?.name || methodId,
+                amount: amountValue,
+              };
             }
-          } else {
-            // إذا لم نجد الطريقة، نضعها في نقدي افتراضياً
-            cashSales += amount;
           }
-        });
+        );
       }
       // النظام القديم - paymentType فقط
       else if (inv.paymentType) {
         const amount = inv.total || 0;
-        if (inv.paymentType === "cash") {
-          cashSales += amount;
+        const cashMethod = paymentMethods.find((pm: any) => pm.type === "cash");
+
+        if (inv.paymentType === "cash" && cashMethod) {
+          paymentMethodSales[cashMethod.id].amount += amount;
         }
-        // credit و installment لا تُحسب هنا لأنها ليست مدفوعات فورية
       }
     });
 
     setDailySummary({
       invoiceCount: todayInvoices.length,
       totalSales,
-      cashSales,
-      cardSales,
-      walletSales,
+      paymentMethodSales, // إضافة المبيعات حسب طرق الدفع
       totalExpenses,
       totalReturns,
       netProfit: totalSales - totalExpenses - totalReturns,
@@ -379,6 +444,7 @@ export const POSHeader = () => {
           path: "/product-categories",
         },
         { name: "الموردين", icon: Users, path: "/suppliers" },
+        { name: "المشتريات", icon: ShoppingCart, path: "/purchases" },
         { name: "الموظفين", icon: Users, path: "/employees" },
         { name: "سُلف الموظفين", icon: FileText, path: "/employee-advances" },
         {
@@ -463,6 +529,19 @@ export const POSHeader = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Cart Button - للانتقال السريع لصفحة POS */}
+          {location.pathname !== "/" && (
+            <Button
+              variant="default"
+              onClick={() => navigate("/")}
+              className="gap-2 bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm border border-white/30"
+              title="الذهاب إلى نقطة البيع"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              <span className="hidden md:inline">السلة</span>
+            </Button>
+          )}
+
           {/* Daily Summary Button */}
           <Button
             variant="default"
@@ -651,230 +730,6 @@ export const POSHeader = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Close Shift Dialog */}
-      <Dialog
-        open={closeShiftDialogOpen}
-        onOpenChange={setCloseShiftDialogOpen}
-      >
-        <DialogContent dir="rtl" className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <StopCircle className="h-6 w-6 text-amber-600" />
-              إغلاق الوردية وتسجيل الخروج
-            </DialogTitle>
-          </DialogHeader>
-
-          {currentShift && (
-            <div className="space-y-4 py-4">
-              {/* Shift Info */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <h3 className="font-semibold mb-2">معلومات الوردية</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <p>
-                    <strong>الموظف:</strong> {currentShift.employeeName}
-                  </p>
-                  <p>
-                    <strong>بداية الوردية:</strong>{" "}
-                    {new Date(currentShift.startTime).toLocaleTimeString(
-                      "ar-EG"
-                    )}
-                  </p>
-                  <p>
-                    <strong>الرصيد الافتتاحي:</strong>{" "}
-                    {currentShift.startingCash.toFixed(2)} جنيه
-                  </p>
-                </div>
-              </div>
-
-              {/* Sales Summary */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h3 className="font-semibold mb-2 text-green-900">
-                  💰 ملخص المبيعات
-                </h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <p>
-                    عدد الفواتير:{" "}
-                    <strong>{currentShift.sales.totalInvoices}</strong>
-                  </p>
-                  <p>
-                    إجمالي المبيعات:{" "}
-                    <strong>{currentShift.sales.totalAmount.toFixed(2)}</strong>{" "}
-                    جنيه
-                  </p>
-                  <p>
-                    مبيعات نقدية:{" "}
-                    <strong>{currentShift.sales.cashSales.toFixed(2)}</strong>{" "}
-                    جنيه
-                  </p>
-                  <p>
-                    مبيعات بطاقات:{" "}
-                    <strong>{currentShift.sales.cardSales.toFixed(2)}</strong>{" "}
-                    جنيه
-                  </p>
-                  <p>
-                    مبيعات محافظ:{" "}
-                    <strong>{currentShift.sales.walletSales.toFixed(2)}</strong>{" "}
-                    جنيه
-                  </p>
-                  <p>
-                    مرتجعات:{" "}
-                    <strong className="text-red-600">
-                      -{currentShift.sales.returns.toFixed(2)}
-                    </strong>{" "}
-                    جنيه
-                  </p>
-                </div>
-              </div>
-
-              {/* Cash Calculation */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold mb-3 text-blue-900">
-                  🧮 حساب النقدية في الدرج
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>الرصيد الافتتاحي:</span>
-                    <strong>+{currentShift.startingCash.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>مبيعات نقدية:</span>
-                    <strong>+{currentShift.sales.cashSales.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between text-red-600">
-                    <span>مصروفات:</span>
-                    <strong>-{currentShift.expenses.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between text-red-600">
-                    <span>مرتجعات نقدية:</span>
-                    <strong>-{currentShift.sales.returns.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t-2 border-blue-300 text-lg font-bold text-blue-900">
-                    <span>النقدية المتوقعة:</span>
-                    <strong>
-                      {(
-                        currentShift.startingCash +
-                        currentShift.sales.cashSales -
-                        currentShift.expenses -
-                        currentShift.sales.returns
-                      ).toFixed(2)}{" "}
-                      جنيه
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actual Cash Input */}
-              <div>
-                <Label className="text-base font-semibold">
-                  النقدية الفعلية في الدرج *
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="أدخل المبلغ النقدي الموجود فعلياً في الدرج"
-                  value={actualCashInDrawer}
-                  onChange={(e) => setActualCashInDrawer(e.target.value)}
-                  className="mt-2 text-lg font-bold"
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  قم بعد النقود الموجودة في الدرج وأدخل المبلغ الفعلي
-                </p>
-
-                {actualCashInDrawer && (
-                  <div
-                    className={`mt-3 p-3 rounded-lg ${
-                      Math.abs(
-                        parseFloat(actualCashInDrawer) -
-                          (currentShift.startingCash +
-                            currentShift.sales.cashSales -
-                            currentShift.expenses -
-                            currentShift.sales.returns)
-                      ) < 1
-                        ? "bg-green-100 text-green-900"
-                        : "bg-red-100 text-red-900"
-                    }`}
-                  >
-                    <p className="font-semibold">
-                      الفرق:{" "}
-                      {(
-                        parseFloat(actualCashInDrawer) -
-                        (currentShift.startingCash +
-                          currentShift.sales.cashSales -
-                          currentShift.expenses -
-                          currentShift.sales.returns)
-                      ).toFixed(2)}{" "}
-                      جنيه
-                    </p>
-                    {Math.abs(
-                      parseFloat(actualCashInDrawer) -
-                        (currentShift.startingCash +
-                          currentShift.sales.cashSales -
-                          currentShift.expenses -
-                          currentShift.sales.returns)
-                    ) >= 1 && (
-                      <p className="text-xs mt-1">
-                        ⚠️ يوجد فرق بين النقدية المتوقعة والفعلية
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Warning */}
-              <div className="bg-amber-100 border border-amber-300 rounded-lg p-3 text-amber-900 text-sm">
-                ⚠️ <strong>تحذير:</strong> سيتم إغلاق الوردية الحالية وتسجيل
-                خروجك من النظام.
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setCloseShiftDialogOpen(false)}
-            >
-              إلغاء
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleConfirmLogout(false)}
-            >
-              تسجيل خروج بدون إغلاق الوردية
-            </Button>
-            <Button
-              onClick={async () => {
-                if (actualCashInDrawer && currentShift) {
-                  const expectedCash =
-                    currentShift.startingCash +
-                    currentShift.sales.cashSales -
-                    currentShift.expenses -
-                    currentShift.sales.returns;
-
-                  const actualCash = parseFloat(actualCashInDrawer);
-
-                  await db.update("shifts", {
-                    ...currentShift,
-                    status: "closed",
-                    endTime: new Date().toISOString(),
-                    expectedCash,
-                    actualCash,
-                    difference: actualCash - expectedCash,
-                    closedBy: user?.name,
-                  });
-                }
-                handleConfirmLogout(true);
-              }}
-              disabled={!actualCashInDrawer}
-              className="gap-2 bg-amber-600 hover:bg-amber-700"
-            >
-              <StopCircle className="h-4 w-4" />
-              إغلاق الوردية وتسجيل الخروج
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Daily Summary Dialog */}
       <Dialog
         open={dailySummaryDialogOpen}
@@ -935,18 +790,19 @@ export const POSHeader = () => {
                   💳 طرق الدفع
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center bg-white p-2 rounded">
-                    <span className="text-sm">💵 نقدي</span>
-                    <strong>{dailySummary.cashSales.toFixed(2)} جنيه</strong>
-                  </div>
-                  <div className="flex justify-between items-center bg-white p-2 rounded">
-                    <span className="text-sm">💳 بطاقات</span>
-                    <strong>{dailySummary.cardSales.toFixed(2)} جنيه</strong>
-                  </div>
-                  <div className="flex justify-between items-center bg-white p-2 rounded">
-                    <span className="text-sm">📱 محافظ إلكترونية</span>
-                    <strong>{dailySummary.walletSales.toFixed(2)} جنيه</strong>
-                  </div>
+                  {dailySummary.paymentMethodSales &&
+                    Object.entries(dailySummary.paymentMethodSales).map(
+                      ([methodId, data]: [string, any]) =>
+                        data.amount > 0 && (
+                          <div
+                            key={methodId}
+                            className="flex justify-between items-center bg-white p-2 rounded"
+                          >
+                            <span className="text-sm">{data.name}</span>
+                            <strong>{data.amount.toFixed(2)} جنيه</strong>
+                          </div>
+                        )
+                    )}
                 </div>
               </div>
 
@@ -1004,6 +860,16 @@ export const POSHeader = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ZReport Dialog لإغلاق الوردية */}
+      {currentShift && (
+        <ZReportDialog
+          open={zReportOpen}
+          onOpenChange={setZReportOpen}
+          shiftId={Number(currentShift.id)}
+          onConfirm={handleCloseShiftFromZReport}
+        />
+      )}
     </header>
   );
 };

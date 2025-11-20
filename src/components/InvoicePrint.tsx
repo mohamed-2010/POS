@@ -148,7 +148,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
             style={{
               marginBottom: "8px",
               fontSize: "10px",
-              backgroundColor: "#fff8dc",
+              backgroundColor: "#000000",
               padding: "6px",
               borderRadius: "4px",
               border: "1px dashed #daa520",
@@ -162,8 +162,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 alignItems: "center",
               }}
             >
-              <span style={{ color: "#666" }}>رقم الفاتورة:</span>
-              <strong style={{ fontSize: "12px", color: "#d97706" }}>
+              <span style={{ color: "#ffffff" }}>رقم الفاتورة:</span>
+              <strong style={{ fontSize: "12px", color: "#ffffff" }}>
                 #{invoice.id}
               </strong>
             </div>
@@ -174,8 +174,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 marginBottom: "3px",
               }}
             >
-              <span style={{ color: "#666" }}>التاريخ:</span>
-              <span style={{ fontSize: "9px" }}>
+              <span style={{ color: "#ffffff" }}>التاريخ:</span>
+              <span style={{ fontSize: "9px", color: "#ffffff" }}>
                 {new Date(invoice.createdAt).toLocaleString("ar-EG")}
               </span>
             </div>
@@ -187,8 +187,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                   marginBottom: "3px",
                 }}
               >
-                <span style={{ color: "#666" }}>العميل:</span>
-                <span style={{ fontWeight: "600" }}>
+                <span style={{ color: "#ffffff" }}>العميل:</span>
+                <span style={{ fontWeight: "600", color: "#ffffff" }}>
                   {invoice.customerName}
                 </span>
               </div>
@@ -200,8 +200,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 marginBottom: "3px",
               }}
             >
-              <span style={{ color: "#666" }}>الموظف:</span>
-              <span>{invoice.userName}</span>
+              <span style={{ color: "#ffffff" }}>الموظف:</span>
+              <span style={{ color: "#ffffff" }}>{invoice.userName}</span>
             </div>
           </div>
 
@@ -223,8 +223,9 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
               <thead>
                 <tr
                   style={{
-                    borderBottom: "2px solid #333",
-                    backgroundColor: "#f0f0f0",
+                    borderBottom: "2px solid #000000",
+                    backgroundColor: "#000000",
+                    color: "#ffffff",
                   }}
                 >
                   <th
@@ -274,7 +275,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                     key={index}
                     style={{
                       borderBottom: "1px dotted #ddd",
-                      backgroundColor: index % 2 === 0 ? "#fafafa" : "white",
+                      backgroundColor: index % 2 === 0 ? "#000000" : "#1a1a1a",
+                      color: "#ffffff",
                     }}
                   >
                     <td style={{ padding: "6px 2px", textAlign: "right" }}>
@@ -285,7 +287,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                         <span
                           style={{
                             fontSize: "9px",
-                            color: "#666",
+                            color: "#999999",
                             fontStyle: "italic",
                           }}
                         >
@@ -299,7 +301,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                         padding: "6px 2px",
                         textAlign: "center",
                         fontWeight: "600",
-                        color: "#2563eb",
+                        color: "#ffffff",
                       }}
                     >
                       {item.quantity}
@@ -318,7 +320,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                         padding: "6px 2px",
                         textAlign: "left",
                         fontWeight: "bold",
-                        color: "#059669",
+                        color: "#ffffff",
                       }}
                     >
                       {item.total.toFixed(2)}
@@ -335,7 +337,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
               borderTop: "2px solid #000",
               paddingTop: "8px",
               marginBottom: "8px",
-              backgroundColor: "#f9fafb",
+              backgroundColor: "#000000",
               padding: "8px",
               borderRadius: "4px",
             }}
@@ -348,8 +350,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 fontSize: "11px",
               }}
             >
-              <span style={{ color: "#666" }}>المجموع الفرعي:</span>
-              <span style={{ fontWeight: "600" }}>
+              <span style={{ color: "#ffffff" }}>المجموع الفرعي:</span>
+              <span style={{ fontWeight: "600", color: "#ffffff" }}>
                 {invoice.subtotal.toFixed(2)} {currency}
               </span>
             </div>
@@ -363,8 +365,8 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                   fontSize: "10px",
                 }}
               >
-                <span style={{ color: "#666" }}>الضريبة:</span>
-                <span style={{ fontWeight: "600", color: "#dc2626" }}>
+                <span style={{ color: "#ffffff" }}>الضريبة:</span>
+                <span style={{ fontWeight: "600", color: "#ffffff" }}>
                   {invoice.tax.toFixed(2)} {currency}
                 </span>
               </div>
@@ -399,13 +401,15 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                     justifyContent: "space-between",
                     marginTop: "6px",
                     fontSize: "11px",
-                    backgroundColor: "#d1fae5",
+                    backgroundColor: "#000000",
                     padding: "4px 6px",
                     borderRadius: "3px",
                   }}
                 >
-                  <span style={{ fontWeight: "600" }}>المدفوع:</span>
-                  <span style={{ color: "#059669", fontWeight: "bold" }}>
+                  <span style={{ fontWeight: "600", color: "#ffffff" }}>
+                    المدفوع:
+                  </span>
+                  <span style={{ color: "#ffffff", fontWeight: "bold" }}>
                     {invoice.paidAmount.toFixed(2)} {currency}
                   </span>
                 </div>
@@ -423,7 +427,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                     }}
                   >
                     <span style={{ fontWeight: "600" }}>المتبقي:</span>
-                    <span style={{ color: "#dc2626", fontWeight: "bold" }}>
+                    <span style={{ color: "#ffffff", fontWeight: "bold" }}>
                       {invoice.remainingAmount.toFixed(2)} {currency}
                     </span>
                   </div>
@@ -458,17 +462,17 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
               style={{
                 marginBottom: "8px",
                 fontSize: "10px",
-                backgroundColor: "#ede9fe",
+                backgroundColor: "#000000",
                 padding: "8px",
                 borderRadius: "4px",
-                border: "1px solid #c4b5fd",
+                border: "1px solid #000000",
               }}
             >
               <div
                 style={{
                   fontWeight: "bold",
                   marginBottom: "6px",
-                  color: "#5b21b6",
+                  color: "#000000",
                   fontSize: "11px",
                 }}
               >
@@ -484,16 +488,14 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                       justifyContent: "space-between",
                       marginBottom: "3px",
                       paddingBottom: "3px",
-                      borderBottom:
-                        index < invoice.paymentMethodIds.length - 1
-                          ? "1px dashed #c4b5fd"
-                          : "none",
+                      borderBottom: "1px dashed #000000",
+                      backgroundColor: "#000000",
                     }}
                   >
-                    <span style={{ color: "#6b21a8" }}>
+                    <span style={{ color: "#ffffff" }}>
                       • طريقة {index + 1}
                     </span>
-                    <span style={{ fontWeight: "600", color: "#7c3aed" }}>
+                    <span style={{ fontWeight: "600", color: "#ffffff" }}>
                       {amount.toFixed(2)} {currency}
                     </span>
                   </div>
@@ -515,12 +517,7 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 display: "inline-block",
                 padding: "6px 16px",
                 borderRadius: "20px",
-                backgroundColor:
-                  invoice.paymentStatus === "paid"
-                    ? "#10b981"
-                    : invoice.paymentStatus === "partial"
-                    ? "#f59e0b"
-                    : "#ef4444",
+                backgroundColor: "#000000",
                 color: "white",
                 fontWeight: "bold",
                 fontSize: "12px",

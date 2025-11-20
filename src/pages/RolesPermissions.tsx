@@ -89,6 +89,15 @@ const RolesPermissions = () => {
         delete: "حذف مورد",
       },
     },
+    purchases: {
+      name: "المشتريات",
+      actions: {
+        view: "عرض المشتريات",
+        create: "إنشاء فاتورة شراء",
+        edit: "تعديل فاتورة",
+        delete: "حذف فاتورة",
+      },
+    },
     employees: {
       name: "الموظفين",
       actions: {
@@ -185,6 +194,14 @@ const RolesPermissions = () => {
       actions: {
         view: "عرض المصروفات",
         create: "إضافة مصروف",
+      },
+    },
+    employeeAdvances: {
+      name: "سُلف الموظفين",
+      actions: {
+        view: "عرض السُلف",
+        create: "إضافة سُلفة",
+        approve: "اعتماد/رفض سُلفة",
       },
     },
   };

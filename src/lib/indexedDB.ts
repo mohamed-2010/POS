@@ -1,6 +1,6 @@
 // نظام قاعدة البيانات المحلية IndexedDB
 const DB_NAME = "MASRPOS";
-const DB_VERSION = 13; // Added ProductUnits, Warehouses, ProductStock for multi-unit and multi-warehouse support
+const DB_VERSION = 14; // Added Purchases, PurchasePayments tables for purchase management system
 
 export interface User {
   id: string;
@@ -29,7 +29,8 @@ export interface ProductUnit {
   unitId: string;
   unitName: string; // للعرض
   conversionFactor: number; // كم قطعة في هذه الوحدة (مثلاً: كرتونة = 10)
-  price: number; // سعر البيع لهذه الوحدة
+  prices: Record<string, number>; // أسعار البيع لهذه الوحدة حسب نوع السعر { priceTypeId: price }
+  costPrice: number; // سعر التكلفة لهذه الوحدة
   barcode?: string; // باركود خاص بهذه الوحدة
   isBaseUnit: boolean; // هل هي الوحدة الأساسية (القطعة)
   createdAt: string;
@@ -122,6 +123,7 @@ export interface Invoice {
   customerName?: string;
   items: InvoiceItem[];
   subtotal: number;
+  discount: number; // قيمة الخصم
   tax: number;
   total: number;
   paymentType: "cash" | "credit" | "installment";
@@ -151,6 +153,8 @@ export interface InvoiceItem {
   priceTypeName: string; // اسم نوع السعر للعرض
   returnedQuantity?: number; // الكمية المرتجعة من هذا المنتج
   warehouseId?: string; // المخزن الذي تم البيع منه
+  productUnitId?: string; // معرف الوحدة المتعددة إذا كانت موجودة
+  selectedUnitName?: string; // اسم الوحدة المختارة للعرض
 }
 
 export interface InstallmentPlan {
@@ -197,8 +201,57 @@ export interface Supplier {
   address: string;
   email?: string;
   taxNumber?: string;
-  balance: number;
+  balance: number; // الرصيد الحالي (المستحقات على المحل)
+  creditLimit: number; // حد الائتمان المسموح
   createdAt: string;
+  notes?: string;
+}
+
+// فاتورة شراء
+export interface Purchase {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  items: PurchaseItem[];
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  paymentType: "cash" | "credit" | "installment"; // نقدي / آجل / تقسيط
+  paymentStatus: "paid" | "partial" | "unpaid";
+  paidAmount: number;
+  remainingAmount: number;
+  userId: string;
+  userName: string;
+  createdAt: string;
+  dueDate?: string; // تاريخ الاستحقاق للآجل
+  installmentPlan?: InstallmentPlan;
+  shiftId?: string;
+  notes?: string;
+}
+
+// منتج في فاتورة شراء
+export interface PurchaseItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  costPrice: number; // سعر التكلفة
+  total: number;
+  unitId: string;
+  unitName: string;
+  returnedQuantity?: number; // الكمية المرتجعة
+}
+
+// دفعة على فاتورة شراء
+export interface PurchasePayment {
+  id: string;
+  purchaseId: string;
+  amount: number;
+  paymentMethod: string;
+  userId: string;
+  userName: string;
+  createdAt: string;
+  shiftId?: string;
   notes?: string;
 }
 
@@ -1138,6 +1191,46 @@ class IndexedDBService {
             unique: false,
           });
         }
+
+        // Purchases store (v14) - فواتير المشتريات
+        if (!db.objectStoreNames.contains("purchases")) {
+          const purchasesStore = db.createObjectStore("purchases", {
+            keyPath: "id",
+          });
+          purchasesStore.createIndex("supplierId", "supplierId", {
+            unique: false,
+          });
+          purchasesStore.createIndex("paymentStatus", "paymentStatus", {
+            unique: false,
+          });
+          purchasesStore.createIndex("userId", "userId", { unique: false });
+          purchasesStore.createIndex("shiftId", "shiftId", { unique: false });
+          purchasesStore.createIndex("createdAt", "createdAt", {
+            unique: false,
+          });
+        }
+
+        // Purchase Payments store (v14) - دفعات المشتريات
+        if (!db.objectStoreNames.contains("purchasePayments")) {
+          const purchasePaymentsStore = db.createObjectStore(
+            "purchasePayments",
+            {
+              keyPath: "id",
+            }
+          );
+          purchasePaymentsStore.createIndex("purchaseId", "purchaseId", {
+            unique: false,
+          });
+          purchasePaymentsStore.createIndex("userId", "userId", {
+            unique: false,
+          });
+          purchasePaymentsStore.createIndex("shiftId", "shiftId", {
+            unique: false,
+          });
+          purchasePaymentsStore.createIndex("createdAt", "createdAt", {
+            unique: false,
+          });
+        }
       };
     });
 
@@ -1374,6 +1467,7 @@ class IndexedDBService {
           products: ["view", "create", "edit", "delete", "adjustStock"],
           customers: ["view", "create", "edit", "delete"],
           suppliers: ["view", "create", "edit", "delete"],
+          purchases: ["view", "create", "edit", "delete"],
           employees: ["view", "create", "edit", "delete"],
           reports: ["view", "export"],
           settings: ["view", "edit"],
@@ -1387,6 +1481,7 @@ class IndexedDBService {
           deposits: ["view", "create"],
           expenseCategories: ["view", "create", "update"],
           expenses: ["view", "create"],
+          employeeAdvances: ["view", "create", "approve"],
         },
       },
       {
@@ -1402,6 +1497,7 @@ class IndexedDBService {
           products: ["view", "create", "edit", "adjustStock"],
           customers: ["view", "create", "edit"],
           suppliers: ["view", "create", "edit"],
+          purchases: ["view", "create", "edit"],
           employees: ["view", "edit"],
           reports: ["view", "export"],
           settings: ["view"],
@@ -1415,6 +1511,7 @@ class IndexedDBService {
           deposits: ["view", "create"],
           expenseCategories: ["view", "create", "update"],
           expenses: ["view", "create"],
+          employeeAdvances: ["view", "create", "approve"],
         },
       },
       {
@@ -1430,6 +1527,7 @@ class IndexedDBService {
           products: ["view"],
           customers: ["view", "create"],
           suppliers: [],
+          purchases: [],
           employees: [],
           reports: [],
           settings: [],
@@ -1443,6 +1541,7 @@ class IndexedDBService {
           deposits: [],
           expenseCategories: [],
           expenses: [],
+          employeeAdvances: [],
         },
       },
       {
@@ -1458,6 +1557,7 @@ class IndexedDBService {
           products: ["view"],
           customers: ["view"],
           suppliers: ["view"],
+          purchases: ["view"],
           employees: [],
           reports: ["view", "export"],
           settings: [],
@@ -1471,6 +1571,7 @@ class IndexedDBService {
           deposits: ["view"],
           expenseCategories: ["view"],
           expenses: ["view"],
+          employeeAdvances: ["view"],
         },
       },
     ];
@@ -1509,6 +1610,18 @@ class IndexedDBService {
         cashier: [],
         accountant: ["view"],
       },
+      purchases: {
+        admin: ["view", "create", "edit", "delete"],
+        manager: ["view", "create", "edit"],
+        cashier: [],
+        accountant: ["view"],
+      },
+      employeeAdvances: {
+        admin: ["view", "create", "approve"],
+        manager: ["view", "create", "approve"],
+        cashier: [],
+        accountant: ["view"],
+      },
     };
 
     for (const role of roles) {
@@ -1517,7 +1630,9 @@ class IndexedDBService {
         !role.permissions.depositSources ||
         !role.permissions.deposits ||
         !role.permissions.expenseCategories ||
-        !role.permissions.expenses;
+        !role.permissions.expenses ||
+        !role.permissions.purchases ||
+        !role.permissions.employeeAdvances;
 
       if (needsUpdate && role.isDefault) {
         // تحديث الأدوار الافتراضية
@@ -1531,6 +1646,9 @@ class IndexedDBService {
           role.permissions.expenseCategories =
             permissionsToAdd.expenseCategories[roleKey];
           role.permissions.expenses = permissionsToAdd.expenses[roleKey];
+          role.permissions.purchases = permissionsToAdd.purchases[roleKey];
+          role.permissions.employeeAdvances =
+            permissionsToAdd.employeeAdvances[roleKey];
 
           await this.update("roles", role);
           console.log(`✅ تم تحديث صلاحيات دور: ${role.name}`);
@@ -1542,6 +1660,9 @@ class IndexedDBService {
         role.permissions.expenseCategories =
           role.permissions.expenseCategories || [];
         role.permissions.expenses = role.permissions.expenses || [];
+        role.permissions.purchases = role.permissions.purchases || [];
+        role.permissions.employeeAdvances =
+          role.permissions.employeeAdvances || [];
 
         await this.update("roles", role);
         console.log(`✅ تم تحديث دور مخصص: ${role.name}`);

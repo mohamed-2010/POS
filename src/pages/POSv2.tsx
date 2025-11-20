@@ -31,10 +31,12 @@ import {
   Unit,
   PaymentMethod,
   Promotion,
+  ProductUnit,
 } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettingsContext } from "@/contexts/SettingsContext";
+import { useShift } from "@/contexts/ShiftContext";
 import {
   Select,
   SelectContent,
@@ -75,6 +77,10 @@ interface CartItem {
   unitId?: string;
   unitName?: string;
   prices?: Record<string, number>;
+  // Multi-unit support
+  productUnitId?: string; // ID of the ProductUnit record
+  conversionFactor?: number; // How many base units = 1 of this unit
+  selectedUnitName?: string; // Display name of selected unit
 }
 
 interface PendingOrder {
@@ -89,13 +95,13 @@ const POSv2 = () => {
   const { user, can } = useAuth();
   const { toast } = useToast();
   const { getSetting } = useSettingsContext();
+  const { currentShift: contextShift, refreshShift } = useShift();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // States
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [priceTypes, setPriceTypes] = useState<PriceType[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -128,6 +134,16 @@ const POSv2 = () => {
   // Promotions Dialog
   const [promotionDialogOpen, setPromotionDialogOpen] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<string>("");
+
+  // Multi-unit Dialog
+  const [unitSelectionDialog, setUnitSelectionDialog] = useState(false);
+  const [productForUnitSelection, setProductForUnitSelection] =
+    useState<Product | null>(null);
+  const [availableProductUnits, setAvailableProductUnits] = useState<
+    ProductUnit[]
+  >([]);
+  const [selectedProductUnitId, setSelectedProductUnitId] =
+    useState<string>("");
 
   // Installment
   const [installmentMonths, setInstallmentMonths] = useState<string>("3");
@@ -192,7 +208,7 @@ const POSv2 = () => {
     setProducts(productsData);
     setCategories(categoriesData.filter((c) => c.active));
     setCustomers(customersData);
-    setCurrentShift(shiftsData.find((s) => s.status === "active") || null);
+    // currentShift now comes from ShiftContext
 
     const sortedPriceTypes = priceTypesData.sort(
       (a, b) => a.displayOrder - b.displayOrder
@@ -251,34 +267,85 @@ const POSv2 = () => {
   });
 
   // Cart operations
-  const addToCart = (product: Product) => {
-    const existing = cartItems.find((i) => i.id === product.id);
+  const addToCart = async (product: Product) => {
+    // Check if product has multiple units
+    const productUnits = await db.getByIndex<ProductUnit>(
+      "productUnits",
+      "productId",
+      product.id
+    );
+
+    console.log("Product units for", product.nameAr, ":", productUnits);
+
+    if (productUnits && productUnits.length > 0) {
+      // Show unit selection dialog
+      setProductForUnitSelection(product);
+      setAvailableProductUnits(productUnits);
+      setSelectedProductUnitId(productUnits[0]?.id || "");
+      setUnitSelectionDialog(true);
+      return;
+    }
+
+    // No multiple units, add normally
+    addToCartWithUnit(product, null);
+  };
+
+  const addToCartWithUnit = (
+    product: Product,
+    productUnit: ProductUnit | null
+  ) => {
+    const conversionFactor = productUnit?.conversionFactor || 1;
+
+    const existing = cartItems.find(
+      (i) => i.id === product.id && i.productUnitId === productUnit?.id
+    );
 
     if (existing) {
-      if (existing.quantity >= product.stock) {
+      // Check stock availability (in base units)
+      const totalNeededStock =
+        (existing.quantity + 1) * (existing.conversionFactor || 1);
+      if (totalNeededStock > product.stock) {
         toast({ title: "الكمية غير متوفرة", variant: "destructive" });
         return;
       }
-      updateQuantity(product.id, existing.quantity + 1);
+      updateQuantity(
+        existing.id,
+        existing.quantity + 1,
+        existing.productUnitId
+      );
     } else {
-      if (product.stock <= 0) {
+      if (product.stock < conversionFactor) {
         toast({ title: "المنتج غير متوفر", variant: "destructive" });
         return;
       }
 
-      // Use the globally selected price type
+      // Get price type
       const priceTypeId =
         selectedPriceTypeId ||
         (priceTypes.find((pt) => pt.isDefault) || priceTypes[0])?.id ||
         "";
       const priceType = priceTypes.find((pt) => pt.id === priceTypeId);
-      const calculatedPrice =
-        priceTypeId && product.prices?.[priceTypeId]
-          ? product.prices[priceTypeId]
-          : product.price || 0;
 
-      // Get unit info
-      const unit = units.find((u) => u.id === product.unitId);
+      // Calculate price
+      let calculatedPrice = product.price || 0;
+
+      if (productUnit) {
+        // Use unit's price based on selected price type
+        calculatedPrice =
+          productUnit.prices?.[priceTypeId] || product.price || 0;
+      } else {
+        // Use product's price based on selected price type
+        calculatedPrice =
+          priceTypeId && product.prices?.[priceTypeId]
+            ? product.prices[priceTypeId]
+            : product.price || 0;
+      }
+
+      // Get unit info (base unit from product)
+      const baseUnit = units.find((u) => u.id === product.unitId);
+
+      // Get selected unit name (from productUnit if available)
+      const selectedUnitName = productUnit?.unitName || baseUnit?.name;
 
       setCartItems([
         ...cartItems,
@@ -292,28 +359,59 @@ const POSv2 = () => {
           priceTypeId: priceTypeId,
           priceTypeName: priceType?.name,
           unitId: product.unitId,
-          unitName: unit?.name,
-          prices: product.prices,
+          unitName: baseUnit?.name,
+          prices: productUnit?.prices || product.prices,
+          productUnitId: productUnit?.id,
+          conversionFactor: conversionFactor,
+          selectedUnitName: selectedUnitName,
         },
       ]);
     }
     setSearchQuery("");
+    setUnitSelectionDialog(false);
   };
 
-  const updateQuantity = (id: string, qty: number) => {
+  const handleUnitSelectionConfirm = () => {
+    if (!productForUnitSelection || !selectedProductUnitId) return;
+
+    const selectedUnit = availableProductUnits.find(
+      (u) => u.id === selectedProductUnitId
+    );
+    if (!selectedUnit) return;
+
+    addToCartWithUnit(productForUnitSelection, selectedUnit);
+  };
+
+  const updateQuantity = (id: string, qty: number, productUnitId?: string) => {
     if (qty <= 0) {
-      setCartItems(cartItems.filter((i) => i.id !== id));
+      setCartItems(
+        cartItems.filter(
+          (i) => !(i.id === id && i.productUnitId === productUnitId)
+        )
+      );
       return;
     }
 
     const product = products.find((p) => p.id === id);
-    if (product && qty > product.stock) {
-      toast({ title: "الكمية غير متوفرة", variant: "destructive" });
-      return;
+    const cartItem = cartItems.find(
+      (i) => i.id === id && i.productUnitId === productUnitId
+    );
+
+    if (product && cartItem) {
+      // Check stock in base units
+      const neededStock = qty * (cartItem.conversionFactor || 1);
+      if (neededStock > product.stock) {
+        toast({ title: "الكمية غير متوفرة", variant: "destructive" });
+        return;
+      }
     }
 
     setCartItems(
-      cartItems.map((i) => (i.id === id ? { ...i, quantity: qty } : i))
+      cartItems.map((i) =>
+        i.id === id && i.productUnitId === productUnitId
+          ? { ...i, quantity: qty }
+          : i
+      )
     );
   };
 
@@ -324,29 +422,57 @@ const POSv2 = () => {
   };
 
   // Update all cart items when global price type changes
-  const updateGlobalPriceType = (priceTypeId: string) => {
+  const updateGlobalPriceType = async (priceTypeId: string) => {
     setSelectedPriceTypeId(priceTypeId);
     const priceType = priceTypes.find((pt) => pt.id === priceTypeId);
 
-    setCartItems(
-      cartItems.map((item) => {
+    const updatedItems = await Promise.all(
+      cartItems.map(async (item) => {
         const product = products.find((p) => p.id === item.id);
-        if (product && product.prices && product.prices[priceTypeId]) {
-          return {
-            ...item,
-            priceTypeId: priceTypeId,
-            priceTypeName: priceType?.name,
-            price: product.prices[priceTypeId],
-            customPrice: undefined, // Reset custom price when changing price type
-          };
+        if (!product) return item;
+
+        let newPrice = product.price || 0;
+
+        // Check if item has a product unit (multiple units)
+        if (item.productUnitId) {
+          // Get the ProductUnit to get its prices
+          const productUnit = await db.get<ProductUnit>(
+            "productUnits",
+            item.productUnitId
+          );
+          if (
+            productUnit &&
+            productUnit.prices &&
+            productUnit.prices[priceTypeId]
+          ) {
+            newPrice = productUnit.prices[priceTypeId];
+          }
+        } else {
+          // No product unit, use product's prices
+          if (product.prices && product.prices[priceTypeId]) {
+            newPrice = product.prices[priceTypeId];
+          }
         }
-        return item;
+
+        return {
+          ...item,
+          priceTypeId: priceTypeId,
+          priceTypeName: priceType?.name,
+          price: newPrice,
+          customPrice: undefined, // Reset custom price when changing price type
+        };
       })
     );
+
+    setCartItems(updatedItems);
   };
 
-  const removeItem = (id: string) => {
-    setCartItems(cartItems.filter((i) => i.id !== id));
+  const removeItem = (id: string, productUnitId?: string) => {
+    setCartItems(
+      cartItems.filter(
+        (i) => !(i.id === id && i.productUnitId === productUnitId)
+      )
+    );
   };
 
   const clearCart = () => {
@@ -398,6 +524,13 @@ const POSv2 = () => {
       )
     : parseFloat(paidAmount) || 0;
   const change = paid - total;
+
+  // Auto-fill paid amount for cash payments
+  useEffect(() => {
+    if (paymentType === "cash" && !splitPaymentMode && paidAmount === "") {
+      setPaidAmount(total.toFixed(2));
+    }
+  }, [paymentType, total, splitPaymentMode, paidAmount]);
 
   // إضافة طريقة دفع جديدة للدفع المقسم
   const addPaymentSplit = () => {
@@ -525,7 +658,7 @@ const POSv2 = () => {
 
   // Save invoice
   const saveInvoice = async (print = false) => {
-    if (!user || !currentShift) {
+    if (!user || !contextShift) {
       toast({ title: "يجب بدء وردية", variant: "destructive" });
       return;
     }
@@ -596,10 +729,14 @@ const POSv2 = () => {
           total: (i.customPrice || i.price) * i.quantity,
           unitId: i.unitId || "",
           unitName: i.unitName || "",
+          conversionFactor: i.conversionFactor || 1,
           priceTypeId: i.priceTypeId || "",
           priceTypeName: i.priceTypeName || "",
+          productUnitId: i.productUnitId,
+          selectedUnitName: i.selectedUnitName,
         })),
-        subtotal: afterDiscount,
+        subtotal,
+        discount,
         tax,
         total,
         paymentType,
@@ -611,7 +748,7 @@ const POSv2 = () => {
         userId: user.id,
         userName: user.name,
         createdAt: new Date().toISOString(),
-        shiftId: currentShift.id,
+        shiftId: contextShift.id,
         dueDate:
           paymentType === "credit"
             ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -633,16 +770,81 @@ const POSv2 = () => {
       await createWithAudit("invoices", invoice, {
         userId: user.id,
         userName: user.name,
-        shiftId: currentShift.id,
+        shiftId: contextShift.id,
       });
 
-      // Update stock
+      console.log("📝 Invoice saved:", invoice);
+      console.log("🔑 Invoice shiftId:", invoice.shiftId);
+      console.log("💳 Payment Method IDs:", paymentMethodIds);
+      console.log("💰 Payment Method Amounts:", paymentMethodAmounts);
+      console.log("💵 Payment Type:", paymentType);
+      console.log("💸 Paid Amount:", paid);
+      console.log("📦 Current Shift Before Update:", contextShift);
+
+      // Update shift sales data
+      const updatedShift = { ...contextShift };
+      updatedShift.sales.totalInvoices += 1;
+      updatedShift.sales.totalAmount += total;
+
+      // تحديث حسب طريقة الدفع - نحدث دائماً بغض النظر عن paymentType
+      // لأن paymentMethodAmounts يحتوي على التفاصيل الفعلية
+      let cashAmount = 0;
+      let cardAmount = 0;
+      let walletAmount = 0;
+
+      for (const methodId of paymentMethodIds) {
+        const method = paymentMethods.find((pm) => pm.id === methodId);
+        const amount = paymentMethodAmounts[methodId] || 0;
+
+        console.log(
+          `💳 Payment Method: ${method?.name}, Type: ${method?.type}, Amount: ${amount}`
+        );
+
+        if (method?.type === "cash") {
+          cashAmount += amount;
+        } else if (
+          method?.type === "visa" ||
+          method?.type === "bank_transfer"
+        ) {
+          cardAmount += amount;
+        } else if (method?.type === "wallet") {
+          walletAmount += amount;
+        }
+      }
+
+      updatedShift.sales.cashSales += cashAmount;
+      updatedShift.sales.cardSales += cardAmount;
+      updatedShift.sales.walletSales += walletAmount;
+
+      console.log(
+        `💰 Cash: ${cashAmount}, Card: ${cardAmount}, Wallet: ${walletAmount}`
+      );
+
+      console.log("✅ Updated Shift Data:", updatedShift);
+      console.log("💰 Sales Summary:", updatedShift.sales);
+      console.log("🔑 Shift ID for update:", updatedShift.id);
+
+      await db.update("shifts", updatedShift);
+      console.log("✔️ Shift updated in database");
+
+      // تحديث الـ context
+      await refreshShift();
+      console.log("🔄 Shift context refreshed");
+
+      // التحقق من أن التحديث حصل فعلاً
+      const verifyShift = await db.get<Shift>("shifts", updatedShift.id);
+      console.log("🔍 Verified shift from DB:", verifyShift);
+      console.log("🔍 Verified shift sales:", verifyShift?.sales);
+
+      // Update stock (considering conversion factors for multi-unit)
       for (const item of cartItems) {
         const product = products.find((p) => p.id === item.id);
         if (product) {
+          // Calculate stock to deduct based on conversion factor
+          const stockToDeduct = item.quantity * (item.conversionFactor || 1);
           await db.update("products", {
             ...product,
-            stock: product.stock - item.quantity,
+            stock: product.stock - stockToDeduct,
           });
         }
       }
@@ -843,13 +1045,34 @@ const POSv2 = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {cartItems.map((item) => (
-                            <tr key={item.id} className="border-b">
+                          {cartItems.map((item, index) => (
+                            <tr
+                              key={`${item.id}-${
+                                item.productUnitId || "base"
+                              }-${index}`}
+                              className="border-b"
+                            >
                               <td className="p-2">
                                 <div className="font-bold text-xs">
                                   {item.nameAr}
                                 </div>
-                                {item.unitName && (
+                                {item.selectedUnitName && (
+                                  <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[9px] h-4 px-1"
+                                    >
+                                      {item.selectedUnitName}
+                                    </Badge>
+                                    {item.conversionFactor &&
+                                      item.conversionFactor > 1 && (
+                                        <span>
+                                          ({item.conversionFactor} قطعة)
+                                        </span>
+                                      )}
+                                  </div>
+                                )}
+                                {!item.selectedUnitName && item.unitName && (
                                   <div className="text-[10px] text-muted-foreground">
                                     {item.unitName}
                                   </div>
@@ -861,7 +1084,11 @@ const POSv2 = () => {
                                     size="sm"
                                     variant="outline"
                                     onClick={() =>
-                                      updateQuantity(item.id, item.quantity - 1)
+                                      updateQuantity(
+                                        item.id,
+                                        item.quantity - 1,
+                                        item.productUnitId
+                                      )
                                     }
                                     className="h-7 w-7 p-0"
                                   >
@@ -873,7 +1100,8 @@ const POSv2 = () => {
                                     onChange={(e) =>
                                       updateQuantity(
                                         item.id,
-                                        parseInt(e.target.value) || 1
+                                        parseInt(e.target.value) || 1,
+                                        item.productUnitId
                                       )
                                     }
                                     className="h-7 w-14 text-center p-1 text-xs"
@@ -882,7 +1110,11 @@ const POSv2 = () => {
                                     size="sm"
                                     variant="outline"
                                     onClick={() =>
-                                      updateQuantity(item.id, item.quantity + 1)
+                                      updateQuantity(
+                                        item.id,
+                                        item.quantity + 1,
+                                        item.productUnitId
+                                      )
                                     }
                                     className="h-7 w-7 p-0"
                                   >
@@ -894,7 +1126,7 @@ const POSv2 = () => {
                                 <Input
                                   key={`${item.id}-${
                                     item.priceTypeId || "default"
-                                  }`}
+                                  }-${item.productUnitId || "base"}`}
                                   type="number"
                                   step="0.01"
                                   value={
@@ -922,7 +1154,9 @@ const POSv2 = () => {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => removeItem(item.id)}
+                                  onClick={() =>
+                                    removeItem(item.id, item.productUnitId)
+                                  }
                                   className="h-7 w-7 p-0"
                                 >
                                   <Trash2 className="h-3 w-3 text-destructive" />
@@ -1463,11 +1697,15 @@ const POSv2 = () => {
                           <Button
                             variant="secondary"
                             onClick={() => saveInvoice(false)}
+                            disabled={cartItems.length === 0 || paid < total}
                           >
                             <Save className="h-4 w-4 ml-2" />
                             حفظ
                           </Button>
-                          <Button onClick={() => saveInvoice(true)}>
+                          <Button
+                            onClick={() => saveInvoice(true)}
+                            disabled={cartItems.length === 0 || paid < total}
+                          >
                             <Printer className="h-4 w-4 ml-2" />
                             حفظ وطباعة
                           </Button>
@@ -1537,6 +1775,89 @@ const POSv2 = () => {
               إلغاء
             </Button>
             <Button onClick={handleAddCustomer}>إضافة</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unit Selection Dialog */}
+      <Dialog open={unitSelectionDialog} onOpenChange={setUnitSelectionDialog}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>اختر الوحدة</DialogTitle>
+          </DialogHeader>
+          {productForUnitSelection && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="font-semibold">
+                  {productForUnitSelection.nameAr}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  المخزون المتاح: {productForUnitSelection.stock} قطعة
+                </p>
+              </div>
+
+              <div>
+                <Label>الوحدة</Label>
+                <Select
+                  value={selectedProductUnitId}
+                  onValueChange={setSelectedProductUnitId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الوحدة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableProductUnits.map((unit) => {
+                      const priceTypeId =
+                        selectedPriceTypeId ||
+                        (priceTypes.find((pt) => pt.isDefault) || priceTypes[0])
+                          ?.id ||
+                        "";
+                      const unitPrice =
+                        unit.prices?.[priceTypeId] ||
+                        productForUnitSelection.price ||
+                        0;
+                      const availableUnits = Math.floor(
+                        productForUnitSelection.stock / unit.conversionFactor
+                      );
+
+                      return (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          <div className="flex items-center justify-between gap-4 w-full">
+                            <span className="font-semibold">
+                              {unit.unitName}
+                            </span>
+                            <div className="flex items-center gap-3 text-sm">
+                              <Badge variant="secondary">
+                                {unit.conversionFactor} قطعة
+                              </Badge>
+                              <span className="text-green-600 font-medium">
+                                {unitPrice.toFixed(2)} {currency}
+                              </span>
+                              <span className="text-muted-foreground">
+                                ({availableUnits} متاح)
+                              </span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUnitSelectionDialog(false);
+                setProductForUnitSelection(null);
+                setAvailableProductUnits([]);
+              }}
+            >
+              إلغاء
+            </Button>
+            <Button onClick={handleUnitSelectionConfirm}>إضافة للسلة</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
