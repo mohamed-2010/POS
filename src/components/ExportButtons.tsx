@@ -15,7 +15,7 @@ interface ExportButtonsProps {
   data: any[];
   columns: Array<{ header: string; dataKey: string; width?: number }>;
   summary?: Array<{ label: string; value: string | number }>;
-  orientation?: 'portrait' | 'landscape';
+  orientation?: "portrait" | "landscape";
 }
 
 export const ExportButtons = ({
@@ -25,7 +25,7 @@ export const ExportButtons = ({
   data,
   columns,
   summary,
-  orientation = 'portrait'
+  orientation = "portrait",
 }: ExportButtonsProps) => {
   const exportOptions = {
     title,
@@ -34,7 +34,7 @@ export const ExportButtons = ({
     data,
     columns,
     summary,
-    orientation
+    orientation,
   };
 
   const handleExportPDF = () => {
@@ -59,17 +59,23 @@ export const ExportButtons = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExportPDF} className="gap-2 cursor-pointer">
+          <DropdownMenuItem
+            onClick={handleExportPDF}
+            className="gap-2 cursor-pointer"
+          >
             <FileText className="h-4 w-4" />
             تصدير PDF
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleExportExcel} className="gap-2 cursor-pointer">
+          <DropdownMenuItem
+            onClick={handleExportExcel}
+            className="gap-2 cursor-pointer"
+          >
             <Download className="h-4 w-4" />
             تصدير Excel
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      
+
       <Button variant="outline" onClick={handlePrint} className="gap-2">
         <Printer className="h-4 w-4" />
         طباعة
