@@ -31,10 +31,12 @@ import {
   Customer,
 } from "@/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSettingsContext } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
 
 const SalesReturns = () => {
   const { user, can } = useAuth();
+  const { getSetting } = useSettingsContext();
   const [salesReturns, setSalesReturns] = useState<SalesReturn[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -140,7 +142,8 @@ const SalesReturns = () => {
     }
 
     const subtotal = itemsToReturn.reduce((sum, item) => sum + item.total, 0);
-    const taxRate = 0.14; // يمكن أخذها من الإعدادات
+    // أخذ معدل الضريبة من الإعدادات
+    const taxRate = parseFloat(getSetting("taxRate") || "0") / 100;
     const tax = subtotal * taxRate;
     const total = subtotal + tax;
 
@@ -288,7 +291,8 @@ const SalesReturns = () => {
   );
 
   const formatCurrency = (amount: number) => {
-    return amount.toFixed(2) + " EGP";
+    const currency = getSetting("currency") || "EGP";
+    return amount.toFixed(2) + " " + currency;
   };
 
   const formatDate = (date: string) => {
@@ -723,15 +727,40 @@ const SalesReturns = () => {
                     )}
                   </div>
 
-                  <div className="p-3 bg-muted rounded-md">
-                    <p className="text-sm text-muted-foreground">
-                      إجمالي المرتجع
-                    </p>
-                    <p className="text-2xl font-bold text-red-600">
-                      {formatCurrency(
-                        returnItems.reduce((sum, item) => sum + item.total, 0)
-                      )}
-                    </p>
+                  <div className="p-4 bg-muted rounded-md space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">المجموع الفرعي:</span>
+                      <span className="font-semibold">
+                        {formatCurrency(
+                          returnItems.reduce((sum, item) => sum + item.total, 0)
+                        )}
+                      </span>
+                    </div>
+                    {(() => {
+                      const subtotal = returnItems.reduce((sum, item) => sum + item.total, 0);
+                      const taxRate = parseFloat(getSetting("taxRate") || "0") / 100;
+                      const tax = subtotal * taxRate;
+                      return (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              الضريبة ({(taxRate * 100).toFixed(0)}%):
+                            </span>
+                            <span className="font-semibold">
+                              {formatCurrency(tax)}
+                            </span>
+                          </div>
+                          <div className="pt-2 border-t">
+                            <div className="flex justify-between">
+                              <span className="text-sm font-medium">الإجمالي النهائي:</span>
+                              <span className="text-2xl font-bold text-red-600">
+                                {formatCurrency(subtotal + tax)}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

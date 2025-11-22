@@ -286,6 +286,9 @@ export function ZReportDialog({
           dir="rtl"
           className="max-w-3xl max-h-[90vh] overflow-y-auto"
         >
+          <DialogHeader>
+            <DialogTitle>تقرير Z - إغلاق الوردية</DialogTitle>
+          </DialogHeader>
           <div className="text-center py-8">جاري التحميل...</div>
         </DialogContent>
       </Dialog>

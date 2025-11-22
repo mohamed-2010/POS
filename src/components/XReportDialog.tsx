@@ -64,6 +64,9 @@ export function XReportDialog({ open, onOpenChange, shiftId }: Props) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent dir="rtl" className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>تقرير الوردية (X Report)</DialogTitle>
+          </DialogHeader>
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
           </div>

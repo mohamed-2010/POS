@@ -150,10 +150,15 @@ export const CheckoutDialog = ({
         total: item.price * item.quantity,
         unitId: item.unitId || "",
         unitName: item.unitName || "قطعة",
+        conversionFactor: item.conversionFactor || 1,
         priceTypeId: item.priceTypeId || "",
         priceTypeName:
           paymentMethods.find((pm) => pm.id === item.priceTypeId)?.name ||
           "سعر البيع",
+        returnedQuantity: 0, // تهيئة الكمية المرتجعة بصفر
+        warehouseId: item.warehouseId,
+        productUnitId: item.productUnitId,
+        selectedUnitName: item.selectedUnitName,
       }));
 
       let installmentPlan: InstallmentPlan | undefined;
