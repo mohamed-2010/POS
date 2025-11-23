@@ -354,8 +354,8 @@ const Shifts = () => {
                           shift.difference !== 0 && (
                             <span
                               className={`text-xs font-bold ${shift.difference > 0
-                                  ? "text-green-600"
-                                  : "text-red-600"
+                                ? "text-green-600"
+                                : "text-red-600"
                                 }`}
                             >
                               {shift.difference > 0 ? "+" : ""}
@@ -386,10 +386,10 @@ const Shifts = () => {
                         <p className="text-xs text-muted-foreground">الفرق</p>
                         <p
                           className={`font-bold ${(shift.difference || 0) > 0
-                              ? "text-green-600"
-                              : (shift.difference || 0) < 0
-                                ? "text-red-600"
-                                : "text-gray-600"
+                            ? "text-green-600"
+                            : (shift.difference || 0) < 0
+                              ? "text-red-600"
+                              : "text-gray-600"
                             }`}
                         >
                           {formatCurrency(shift.difference || 0)}
@@ -474,10 +474,10 @@ const Shifts = () => {
 
         {/* حوار تقرير Z - إغلاق الوردية */}
         <ZReportDialog
-          open={isZReportOpen}
-          onOpenChange={setIsZReportOpen}
-          shiftId={currentShift?.id ? Number(currentShift.id) : 0}
-          onConfirm={handleCloseShiftFromZReport}
+          open={zReportOpen}
+          onOpenChange={setZReportOpen}
+          shiftId={selectedShift?.id || ""}
+          onConfirm={handleCloseShift}
         />
       </div>
     </div>

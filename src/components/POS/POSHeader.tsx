@@ -50,7 +50,7 @@ import { useShift } from "@/contexts/ShiftContext";
 export const POSHeader = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const { getSetting } = useSettingsContext();
   const { toast } = useToast();
   const { currentShift, refreshShift } = useShift(); // استخدام ShiftContext
@@ -127,9 +127,22 @@ export const POSHeader = () => {
   };
 
   const handleEndShift = async () => {
-    if (!currentShift) return;
+    if (!currentShift || !user) return;
 
-    // فتح ZReportDialog بدلاً من confirm
+    // Check permission: allow if user opened this shift OR has explicit permission
+    const isShiftOwner = currentShift.employeeId === user.id;
+    const hasClosePermission = can("shifts", "close");
+
+    if (!isShiftOwner && !hasClosePermission) {
+      toast({
+        title: "غير مصرح",
+        description: "ليس لديك صلاحية إغلاق وردية موظف آخر",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // فتح ZReportDialog بعد التحقق من الصلاحية
     setZReportOpen(true);
   };
 
@@ -195,6 +208,18 @@ export const POSHeader = () => {
   const handleLogout = () => {
     // إذا كان هناك وردية مفتوحة، اعرض ZReportDialog
     if (currentShift && currentShift.status === "active") {
+      // Check permission: allow if user opened this shift OR has explicit permission
+      const isShiftOwner = currentShift.employeeId === user?.id;
+      const hasClosePermission = can("shifts", "close");
+
+      if (!isShiftOwner && !hasClosePermission) {
+        toast({
+          title: "تنبيه",
+          description: "لديك وردية مفتوحة لموظف آخر. يرجى الاتصال بالمدير لإغلاقها.",
+          variant: "destructive",
+        });
+        return;
+      }
       setZReportOpen(true);
     } else {
       // لا توجد وردية مفتوحة، قم بتسجيل الخروج مباشرة
@@ -226,55 +251,152 @@ export const POSHeader = () => {
     {
       title: "الصفحات الرئيسية",
       items: [
-        { name: "نقطة البيع", icon: ShoppingCart, path: "/" },
-        { name: "العملاء", icon: Users, path: "/customers" },
-        { name: "التقارير", icon: FileText, path: "/reports" },
+        {
+          name: "نقطة البيع",
+          icon: ShoppingCart,
+          path: "/",
+          check: () => can("invoices", "create") || can("invoices", "view")
+        },
+        {
+          name: "العملاء",
+          icon: Users,
+          path: "/customers",
+          check: () => can("customers", "view")
+        },
+        {
+          name: "التقارير",
+          icon: FileText,
+          path: "/reports",
+          check: () => can("reports", "view")
+        },
       ],
     },
     {
       title: "الإدارة",
       items: [
-        { name: "المخزون", icon: ShoppingCart, path: "/inventory" },
+        {
+          name: "المخزون",
+          icon: ShoppingCart,
+          path: "/inventory",
+          check: () => can("products", "view")
+        },
         {
           name: "أقسام المنتجات",
           icon: FolderOpen,
           path: "/product-categories",
+          check: () => can("products", "view")
         },
-        { name: "الموردين", icon: Users, path: "/suppliers" },
-        { name: "المشتريات", icon: ShoppingCart, path: "/purchases" },
-        { name: "الموظفين", icon: Users, path: "/employees" },
-        { name: "سُلف الموظفين", icon: FileText, path: "/employee-advances" },
+        {
+          name: "الموردين",
+          icon: Users,
+          path: "/suppliers",
+          check: () => can("suppliers", "view")
+        },
+        {
+          name: "المشتريات",
+          icon: ShoppingCart,
+          path: "/purchases",
+          check: () => can("purchases", "view")
+        },
+        {
+          name: "الموظفين",
+          icon: Users,
+          path: "/employees",
+          check: () => can("employees", "view")
+        },
+        {
+          name: "سُلف الموظفين",
+          icon: FileText,
+          path: "/employee-advances",
+          check: () => can("employeeAdvances", "view")
+        },
         {
           name: "خصومات الموظفين",
           icon: FileText,
           path: "/employee-deductions",
+          check: () => can("employeeAdvances", "view") // using same permission
         },
-        { name: "العروض والخصومات", icon: FileText, path: "/promotions" },
-        { name: "إدارة التقسيط", icon: FileText, path: "/installments" },
-        { name: "إدارة الآجل", icon: FileText, path: "/credit" },
+        {
+          name: "العروض والخصومات",
+          icon: FileText,
+          path: "/promotions",
+          check: () => can("promotions", "view")
+        },
+        {
+          name: "إدارة التقسيط",
+          icon: FileText,
+          path: "/installments",
+          check: () => can("installments", "view")
+        },
+        {
+          name: "إدارة الآجل",
+          icon: FileText,
+          path: "/credit",
+          check: () => can("credit", "view")
+        },
       ],
     },
     {
       title: "المالية",
       items: [
-        { name: "مصادر الإيداعات", icon: FileText, path: "/deposit-sources" },
-        { name: "الإيداعات", icon: FileText, path: "/deposits" },
-        { name: "فئات المصروفات", icon: FileText, path: "/expense-categories" },
-        { name: "المصروفات", icon: FileText, path: "/expenses" },
+        {
+          name: "مصادر الإيداعات",
+          icon: FileText,
+          path: "/deposit-sources",
+          check: () => can("depositSources", "view")
+        },
+        {
+          name: "الإيداعات",
+          icon: FileText,
+          path: "/deposits",
+          check: () => can("deposits", "view")
+        },
+        {
+          name: "فئات المصروفات",
+          icon: FileText,
+          path: "/expense-categories",
+          check: () => can("expenseCategories", "view")
+        },
+        {
+          name: "المصروفات",
+          icon: FileText,
+          path: "/expenses",
+          check: () => can("expenses", "view")
+        },
       ],
     },
     {
       title: "الورديات والمرتجعات",
       items: [
-        { name: "إدارة الورديات", icon: ShoppingCart, path: "/shifts" },
-        { name: "مرتجع المبيعات", icon: FileText, path: "/sales-returns" },
-        { name: "مرتجع المشتريات", icon: FileText, path: "/purchase-returns" },
+        {
+          name: "إدارة الورديات",
+          icon: ShoppingCart,
+          path: "/shifts",
+          check: () => can("shifts", "view")
+        },
+        {
+          name: "مرتجع المبيعات",
+          icon: FileText,
+          path: "/sales-returns",
+          check: () => can("returns", "view")
+        },
+        {
+          name: "مرتجع المشتريات",
+          icon: FileText,
+          path: "/purchase-returns",
+          check: () => can("returns", "view")
+        },
       ],
     },
     {
       title: "المطاعم",
       items: [
-        { name: "الصالات والطاولات", icon: ShoppingCart, path: "/restaurant" },
+        {
+          name: "الصالات والطاولات",
+          icon: ShoppingCart,
+          path: "/restaurant",
+          check: () => can("restaurant", "view")
+        },
       ],
     },
     {
@@ -284,27 +406,59 @@ export const POSHeader = () => {
           name: "إدارة الحسابات",
           icon: MessageSquare,
           path: "/whatsapp-management",
+          check: () => can("settings", "view") // WhatsApp management requires settings permission
         },
-        { name: "الحملات التسويقية", icon: Send, path: "/whatsapp-campaigns" },
+        {
+          name: "الحملات التسويقية",
+          icon: Send,
+          path: "/whatsapp-campaigns",
+          check: () => can("settings", "view")
+        },
       ],
     },
     {
       title: "الإعدادات الأساسية",
       items: [
-        { name: "وحدات القياس", icon: Ruler, path: "/units" },
-        { name: "أنواع التسعير", icon: DollarSign, path: "/price-types" },
-        { name: "طرق الدفع", icon: CreditCard, path: "/payment-methods" },
-        { name: "إعدادات الطابعة", icon: Printer, path: "/printer-settings" },
+        {
+          name: "وحدات القياس",
+          icon: Ruler,
+          path: "/units",
+          check: () => can("settings", "view")
+        },
+        {
+          name: "أنواع التسعير",
+          icon: DollarSign,
+          path: "/price-types",
+          check: () => can("settings", "view")
+        },
+        {
+          name: "طرق الدفع",
+          icon: CreditCard,
+          path: "/payment-methods",
+          check: () => can("settings", "view")
+        },
+        {
+          name: "إعدادات الطابعة",
+          icon: Printer,
+          path: "/printer-settings",
+          check: () => can("settings", "view")
+        },
       ],
     },
     {
       title: "النظام",
       items: [
-        { name: "الإعدادات", icon: ShoppingCart, path: "/settings" },
+        {
+          name: "الإعدادات",
+          icon: ShoppingCart,
+          path: "/settings",
+          check: () => can("settings", "view")
+        },
         {
           name: "الأدوار والصلاحيات",
           icon: Shield,
           path: "/roles-permissions",
+          check: () => can("settings", "edit") // Only admins should manage roles
         },
       ],
     },
@@ -430,32 +584,42 @@ export const POSHeader = () => {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {menuItems.map((section, idx) => (
-              <div key={idx}>
-                <h3 className="text-lg font-semibold mb-3 text-primary">
-                  {section.title}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {section.items.map((item, itemIdx) => (
-                    <Card
-                      key={itemIdx}
-                      className="p-4 cursor-pointer hover:shadow-lg transition-all hover:border-primary"
-                      onClick={() => {
-                        navigate(item.path);
-                        setMenuOpen(false);
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="bg-primary/10 p-3 rounded-lg">
-                          <item.icon className="h-6 w-6 text-primary" />
+            {menuItems.map((section, idx) => {
+              // Filter items based on permissions
+              const visibleItems = section.items.filter(item =>
+                !item.check || item.check()
+              );
+
+              // Don't show section if no items are visible
+              if (visibleItems.length === 0) return null;
+
+              return (
+                <div key={idx}>
+                  <h3 className="text-lg font-semibold mb-3 text-primary">
+                    {section.title}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {visibleItems.map((item, itemIdx) => (
+                      <Card
+                        key={itemIdx}
+                        className="p-4 cursor-pointer hover:shadow-lg transition-all hover:border-primary"
+                        onClick={() => {
+                          navigate(item.path);
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary/10 p-3 rounded-lg">
+                            <item.icon className="h-6 w-6 text-primary" />
+                          </div>
+                          <span className="font-semibold">{item.name}</span>
                         </div>
-                        <span className="font-semibold">{item.name}</span>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>
@@ -661,7 +825,7 @@ export const POSHeader = () => {
         <ZReportDialog
           open={zReportOpen}
           onOpenChange={setZReportOpen}
-          shiftId={Number(currentShift.id)}
+          shiftId={currentShift.id}
           onConfirm={handleCloseShiftFromZReport}
         />
       )}

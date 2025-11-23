@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (userData && userData.active) {
           setUser(userData);
           // جلب صلاحيات الدور من قاعدة البيانات
-          await loadUserRole(userData.role);
+          await loadUserRole(userData);
         } else {
           localStorage.removeItem("currentUserId");
         }
@@ -48,12 +48,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
-  const loadUserRole = async (roleId: string) => {
+  const loadUserRole = async (user: User) => {
     try {
-      const role = await db.get<Role>("roles", roleId);
-      setUserRole(role || null);
+      // Prioritize roleId, fallback to role for backwards compatibility
+      const roleIdToLoad = user.roleId || user.role;
+      console.log(`[AuthContext] Loading role for user "${user.username}": ${roleIdToLoad}`);
+
+      const role = await db.get<Role>("roles", roleIdToLoad);
+
+      if (role) {
+        console.log(`[AuthContext] Role loaded successfully:`, role.name, `(${role.id})`);
+        console.log(`[AuthContext] Permissions:`, role.permissions);
+        setUserRole(role);
+      } else {
+        console.error(`[AuthContext] Role not found for ID: ${roleIdToLoad}`);
+        console.error(`[AuthContext] User object:`, user);
+        setUserRole(null);
+      }
     } catch (error) {
-      console.error("Error loading role:", error);
+      console.error("[AuthContext] Error loading role:", error);
       setUserRole(null);
     }
   };
@@ -72,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(foundUser);
         localStorage.setItem("currentUserId", foundUser.id);
         // جلب صلاحيات الدور
-        await loadUserRole(foundUser.role);
+        await loadUserRole(foundUser);
         return true;
       }
       return false;

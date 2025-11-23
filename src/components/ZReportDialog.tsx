@@ -20,7 +20,7 @@ import { toast } from "sonner";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  shiftId: number;
+  shiftId: string; // Changed to string to match database schema
   onConfirm: (actualCash: number, denominations: Denominations) => void;
 }
 
@@ -73,19 +73,22 @@ export function ZReportDialog({
   const loadReport = async () => {
     setLoading(true);
     try {
-      // جلب بيانات الوردية الأساسية
-      const shiftData = await db.get<Shift>("shifts", shiftId.toString());
+      // جلب بيانات الوردية الأساسية - استخدام shiftId كـ string مباشرة
+      const shiftData = await db.get<Shift>("shifts", shiftId);
       if (!shiftData) {
+        console.error("[ZReportDialog] Shift not found:", shiftId);
         toast.error("الوردية غير موجودة");
         setLoading(false);
         return;
       }
 
+      console.log("[ZReportDialog] Shift loaded:", shiftData);
+
       // استخدام الدوال الموحدة من calculationService
       const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
 
-      const sales = await calculateShiftSales(shiftId.toString());
-      const cashSummary = await calculateExpectedCash(shiftId.toString());
+      const sales = await calculateShiftSales(shiftId);
+      const cashSummary = await calculateExpectedCash(shiftId);
 
       // تحديث الحالة
       setShift({

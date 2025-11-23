@@ -17,7 +17,7 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!username || !password) {
       toast.error('يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
@@ -88,7 +88,7 @@ const Login = () => {
               )}
             </Button>
           </form>
-          <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+          {/* <div className="mt-6 p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground text-center mb-2">
               بيانات تسجيل الدخول الافتراضية:
             </p>
@@ -96,7 +96,7 @@ const Login = () => {
               المستخدم: <span className="font-bold">admin</span> | 
               كلمة المرور: <span className="font-bold">admin123</span>
             </p>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

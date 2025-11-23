@@ -173,6 +173,7 @@ const Employees = () => {
         );
 
         if (userToUpdate) {
+          console.log("[Employees] Updating user role from", userToUpdate.role, "to", formData.role);
           userToUpdate.role = formData.role;
           userToUpdate.roleId = formData.role; // Save roleId for custom roles
           userToUpdate.name = formData.name;
@@ -216,11 +217,13 @@ const Employees = () => {
           username: formData.username,
           password: formData.password,
           name: formData.name,
-          role: formData.role,
-          roleId: formData.role, // Save roleId for custom roles
+          role: formData.role, // backwards compatibility
+          roleId: formData.role, // CRITICAL: this is the actual role ID
           active: formData.active,
+          createdAt: new Date().toISOString(),
         };
 
+        console.log("[Employees] Creating new user with role:", formData.role, "roleId:", formData.role);
         await db.add("users", newUser);
         toast({
           title: "تم إضافة الموظف بنجاح",

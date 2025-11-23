@@ -591,8 +591,8 @@ const POSv2 = () => {
     toast({
       title: "تم تطبيق العرض",
       description: `${promotion.name} - ${promotion.discountType === "percentage"
-          ? `${promotion.discountValue}%`
-          : `${promotion.discountValue} جنيه`
+        ? `${promotion.discountValue}%`
+        : `${promotion.discountValue} جنيه`
         }`,
     });
   };
@@ -1373,7 +1373,7 @@ const POSv2 = () => {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <Label className="text-xs">طريقة الدفع</Label>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2" dir="ltr">
                               <Switch
                                 checked={splitPaymentMode}
                                 onCheckedChange={(checked) => {
@@ -1679,8 +1679,8 @@ const POSv2 = () => {
                         {paid > 0 && (
                           <div
                             className={`text-center p-3 rounded ${change >= 0
-                                ? "bg-green-100 text-green-900"
-                                : "bg-red-100 text-red-900"
+                              ? "bg-green-100 text-green-900"
+                              : "bg-red-100 text-red-900"
                               }`}
                           >
                             <div className="text-xs">
@@ -1893,8 +1893,8 @@ const POSv2 = () => {
                 <Card
                   key={promo.id}
                   className={`p-4 cursor-pointer hover:border-green-500 transition-all ${selectedPromotion === promo.id
-                      ? "border-green-500 bg-green-50"
-                      : ""
+                    ? "border-green-500 bg-green-50"
+                    : ""
                     }`}
                   onClick={() => applyPromotion(promo.id)}
                 >
