@@ -193,6 +193,12 @@ const Purchases = () => {
       }
     }
 
+    // التحقق من وجود وردية مفتوحة - CRITICAL!
+    if (!currentShift) {
+      toast.error("يجب فتح وردية أولاً لعمل فاتورة شراء");
+      return;
+    }
+
     try {
       const purchase: Purchase = {
         id: `purchase_${Date.now()}`,
@@ -208,25 +214,25 @@ const Purchases = () => {
           formData.paidAmount >= total
             ? "paid"
             : formData.paidAmount > 0
-            ? "partial"
-            : "unpaid",
+              ? "partial"
+              : "unpaid",
         paidAmount: formData.paidAmount,
         remainingAmount: remaining,
         userId: user.id,
         userName: user.username,
         createdAt: new Date().toISOString(),
         dueDate: formData.dueDate || undefined,
-        shiftId: currentShift?.id,
+        shiftId: currentShift.id,
         notes: formData.notes,
         installmentPlan:
           formData.paymentType === "installment"
             ? {
-                numberOfInstallments: formData.numberOfInstallments,
-                installmentAmount: formData.installmentAmount,
-                interestRate: 0,
-                startDate: new Date().toISOString(),
-                payments: [],
-              }
+              numberOfInstallments: formData.numberOfInstallments,
+              installmentAmount: formData.installmentAmount,
+              interestRate: 0,
+              startDate: new Date().toISOString(),
+              payments: [],
+            }
             : undefined,
       };
 
@@ -380,22 +386,22 @@ const Purchases = () => {
                               purchase.paymentStatus === "paid"
                                 ? "default"
                                 : purchase.paymentStatus === "partial"
-                                ? "secondary"
-                                : "destructive"
+                                  ? "secondary"
+                                  : "destructive"
                             }
                           >
                             {purchase.paymentStatus === "paid"
                               ? "مدفوعة"
                               : purchase.paymentStatus === "partial"
-                              ? "مدفوعة جزئياً"
-                              : "غير مدفوعة"}
+                                ? "مدفوعة جزئياً"
+                                : "غير مدفوعة"}
                           </Badge>
                           <Badge variant="outline">
                             {purchase.paymentType === "cash"
                               ? "نقدي"
                               : purchase.paymentType === "credit"
-                              ? "آجل"
-                              : "تقسيط"}
+                                ? "آجل"
+                                : "تقسيط"}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">

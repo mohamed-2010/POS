@@ -163,9 +163,14 @@ const SalesReturns = () => {
       }
     }
 
-    // الحصول على الوردية الحالية
+    // الحصول على الوردية الحالية - CRITICAL: must exist!
     const allShifts = await db.getAll<Shift>("shifts");
     const currentShift = allShifts.find((s) => s.status === "active");
+
+    if (!currentShift) {
+      toast.error("يجب فتح وردية أولاً لعمل مرتجع مبيعات");
+      return;
+    }
 
     const newReturn: SalesReturn = {
       id: `return_${Date.now()}`,
@@ -182,7 +187,7 @@ const SalesReturns = () => {
       createdAt: new Date().toISOString(),
       refundMethod,
       refundStatus: "pending",
-      shiftId: currentShift?.id,
+      shiftId: currentShift.id,
     };
 
     try {
@@ -369,19 +374,18 @@ const SalesReturns = () => {
                           <FileText className="h-4 w-4" />
                           <span className="font-bold">{returnDoc.id}</span>
                           <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              returnDoc.refundStatus === "completed"
+                            className={`px-2 py-1 rounded text-xs ${returnDoc.refundStatus === "completed"
                                 ? "bg-green-100 text-green-800"
                                 : returnDoc.refundStatus === "pending"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
                           >
                             {returnDoc.refundStatus === "completed"
                               ? "مكتمل"
                               : returnDoc.refundStatus === "pending"
-                              ? "قيد الانتظار"
-                              : "مرفوض"}
+                                ? "قيد الانتظار"
+                                : "مرفوض"}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground">
@@ -454,13 +458,12 @@ const SalesReturns = () => {
                         return (
                           <Card
                             key={invoice.id}
-                            className={`p-3 cursor-pointer hover:bg-muted transition-colors ${
-                              fullyReturned
+                            className={`p-3 cursor-pointer hover:bg-muted transition-colors ${fullyReturned
                                 ? "bg-red-50 dark:bg-red-950/20 border-red-200"
                                 : hasReturns
-                                ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200"
-                                : ""
-                            }`}
+                                  ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200"
+                                  : ""
+                              }`}
                             onClick={() => handleSelectInvoice(invoice)}
                           >
                             <div className="flex justify-between items-center">
@@ -497,8 +500,8 @@ const SalesReturns = () => {
                                   {invoice.paymentStatus === "paid"
                                     ? "مدفوعة"
                                     : invoice.paymentStatus === "partial"
-                                    ? "مدفوعة جزئياً"
-                                    : "غير مدفوعة"}
+                                      ? "مدفوعة جزئياً"
+                                      : "غير مدفوعة"}
                                 </p>
                               </div>
                             </div>
@@ -687,17 +690,17 @@ const SalesReturns = () => {
                                       (sum, item) => sum + item.total,
                                       0
                                     ) >=
-                                  0
+                                    0
                                     ? "text-green-600"
                                     : "text-red-600 font-bold"
                                 }
                               >
                                 {formatCurrency(
                                   customerBalance -
-                                    returnItems.reduce(
-                                      (sum, item) => sum + item.total,
-                                      0
-                                    )
+                                  returnItems.reduce(
+                                    (sum, item) => sum + item.total,
+                                    0
+                                  )
                                 )}
                               </span>
                             </p>
@@ -709,10 +712,10 @@ const SalesReturns = () => {
                               <span className="text-green-600 font-bold">
                                 {formatCurrency(
                                   customerBalance +
-                                    returnItems.reduce(
-                                      (sum, item) => sum + item.total,
-                                      0
-                                    )
+                                  returnItems.reduce(
+                                    (sum, item) => sum + item.total,
+                                    0
+                                  )
                                 )}
                               </span>
                             </p>

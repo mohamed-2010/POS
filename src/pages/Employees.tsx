@@ -450,7 +450,7 @@ const Employees = () => {
               .filter(
                 (a) => a.employeeId === employee.id && a.status === "approved"
               )
-              .reduce((sum, a) => sum + (a.deductionAmount || 0), 0);
+              .reduce((sum, a) => sum + (a.amount || 0), 0);
 
             // حساب الخصومات النشطة للموظف من جدول employeeDeductions
             // الخصومات الثابتة: فقط active
@@ -865,9 +865,8 @@ const Employees = () => {
                               (r) => r.id === formData.role
                             );
                             if (selectedRole) {
-                              return `📋 ${
-                                selectedRole.description || "لا يوجد وصف"
-                              }`;
+                              return `📋 ${selectedRole.description || "لا يوجد وصف"
+                                }`;
                             }
                             return "";
                           })()}

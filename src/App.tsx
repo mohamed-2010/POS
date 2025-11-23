@@ -15,6 +15,8 @@ import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { ShiftProvider } from "@/contexts/ShiftContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { AppProvider } from "@/contexts/AppContext";
 import Index from "./pages/Index";
 import POSv2 from "./pages/POSv2";
 import Customers from "./pages/Customers";
@@ -69,10 +71,8 @@ const RouteCleanup = ({ children }: { children: React.ReactNode }) => {
   // تنظيف Dialog Overlays العالقة عند تغيير المسار
   useEffect(() => {
     const cleanupStuckOverlays = () => {
-      // إزالة أي Dialog Overlays متبقية في DOM
       const overlays = document.querySelectorAll("[data-radix-dialog-overlay]");
       overlays.forEach((overlay) => {
-        // التحقق من أن الـ overlay ليس له dialog content مرتبط
         const dialogContent = overlay.nextElementSibling;
         if (
           !dialogContent ||
@@ -83,14 +83,10 @@ const RouteCleanup = ({ children }: { children: React.ReactNode }) => {
         }
       });
 
-      // إزالة pointer-events: none من body إذا كان موجوداً
       document.body.style.removeProperty("pointer-events");
     };
 
-    // تنظيف فوري
     cleanupStuckOverlays();
-
-    // تنظيف بعد delay قصير للتأكد
     const timeoutId = setTimeout(cleanupStuckOverlays, 100);
 
     return () => clearTimeout(timeoutId);
@@ -119,14 +115,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => {
-  // استخدام HashRouter في Electron و BrowserRouter في الويب
   const isElectron = !!(window as any).electronAPI;
   const Router = isElectron ? HashRouter : BrowserRouter;
 
   // تنظيف عام عند تحميل التطبيق
   useEffect(() => {
     const globalCleanup = () => {
-      // إزالة أي overlays عالقة
       const allOverlays = document.querySelectorAll(
         "[data-radix-dialog-overlay], [data-radix-popover-content], [data-radix-select-content]"
       );
@@ -137,16 +131,12 @@ const App = () => {
         }
       });
 
-      // التأكد من أن body ليس لديه pointer-events: none
       if (document.body.style.pointerEvents === "none") {
         document.body.style.removeProperty("pointer-events");
       }
     };
 
-    // تنظيف عند التحميل
     globalCleanup();
-
-    // تنظيف دوري كل 5 ثوانٍ للتأكد
     const intervalId = setInterval(globalCleanup, 5000);
 
     return () => clearInterval(intervalId);
@@ -159,256 +149,50 @@ const App = () => {
         <Sonner />
         <Router>
           <RouteCleanup>
-            <AuthProvider>
-              <ShiftProvider>
-                <SettingsProvider>
-                  <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route
-                      path="/"
-                      element={
-                        <ProtectedRoute>
-                          <POSv2 />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/pos-old"
-                      element={
-                        <ProtectedRoute>
-                          <Index />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/customers"
-                      element={
-                        <ProtectedRoute>
-                          <Customers />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/reports"
-                      element={
-                        <ProtectedRoute>
-                          <Reports />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/suppliers"
-                      element={
-                        <ProtectedRoute>
-                          <Suppliers />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/inventory"
-                      element={
-                        <ProtectedRoute>
-                          <Inventory />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/product-categories"
-                      element={
-                        <ProtectedRoute>
-                          <ProductCategories />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/employees"
-                      element={
-                        <ProtectedRoute>
-                          <Employees />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/employee-advances"
-                      element={
-                        <ProtectedRoute>
-                          <EmployeeAdvances />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/employee-deductions"
-                      element={
-                        <ProtectedRoute>
-                          <EmployeeDeductions />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/restaurant"
-                      element={
-                        <ProtectedRoute>
-                          <Restaurant />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/promotions"
-                      element={
-                        <ProtectedRoute>
-                          <Promotions />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/settings"
-                      element={
-                        <ProtectedRoute>
-                          <Settings />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/roles-permissions"
-                      element={
-                        <ProtectedRoute>
-                          <RolesPermissions />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/installments"
-                      element={
-                        <ProtectedRoute>
-                          <Installments />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/credit"
-                      element={
-                        <ProtectedRoute>
-                          <Credit />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/shifts"
-                      element={
-                        <ProtectedRoute>
-                          <Shifts />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/sales-returns"
-                      element={
-                        <ProtectedRoute>
-                          <SalesReturns />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/purchases"
-                      element={
-                        <ProtectedRoute>
-                          <Purchases />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/purchase-returns"
-                      element={
-                        <ProtectedRoute>
-                          <PurchaseReturns />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/deposit-sources"
-                      element={
-                        <ProtectedRoute>
-                          <DepositSources />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/deposits"
-                      element={
-                        <ProtectedRoute>
-                          <Deposits />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/expense-categories"
-                      element={
-                        <ProtectedRoute>
-                          <ExpenseCategories />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/expenses"
-                      element={
-                        <ProtectedRoute>
-                          <Expenses />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/whatsapp-management"
-                      element={
-                        <ProtectedRoute>
-                          <WhatsAppManagement />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/whatsapp-campaigns"
-                      element={
-                        <ProtectedRoute>
-                          <WhatsAppCampaigns />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/units"
-                      element={
-                        <ProtectedRoute>
-                          <Units />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/price-types"
-                      element={
-                        <ProtectedRoute>
-                          <PriceTypes />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/payment-methods"
-                      element={
-                        <ProtectedRoute>
-                          <PaymentMethods />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/printer-settings"
-                      element={
-                        <ProtectedRoute>
-                          <PrinterSettings />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </SettingsProvider>
-              </ShiftProvider>
-            </AuthProvider>
+            <AppProvider>
+              <ThemeProvider>
+                <AuthProvider>
+                  <ShiftProvider>
+                    <SettingsProvider>
+                      <Routes>
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/" element={<ProtectedRoute><POSv2 /></ProtectedRoute>} />
+                        <Route path="/pos-old" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                        <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+                        <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+                        <Route path="/suppliers" element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
+                        <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+                        <Route path="/product-categories" element={<ProtectedRoute><ProductCategories /></ProtectedRoute>} />
+                        <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
+                        <Route path="/employee-advances" element={<ProtectedRoute><EmployeeAdvances /></ProtectedRoute>} />
+                        <Route path="/employee-deductions" element={<ProtectedRoute><EmployeeDeductions /></ProtectedRoute>} />
+                        <Route path="/restaurant" element={<ProtectedRoute><Restaurant /></ProtectedRoute>} />
+                        <Route path="/promotions" element={<ProtectedRoute><Promotions /></ProtectedRoute>} />
+                        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                        <Route path="/roles-permissions" element={<ProtectedRoute><RolesPermissions /></ProtectedRoute>} />
+                        <Route path="/installments" element={<ProtectedRoute><Installments /></ProtectedRoute>} />
+                        <Route path="/credit" element={<ProtectedRoute><Credit /></ProtectedRoute>} />
+                        <Route path="/shifts" element={<ProtectedRoute><Shifts /></ProtectedRoute>} />
+                        <Route path="/sales-returns" element={<ProtectedRoute><SalesReturns /></ProtectedRoute>} />
+                        <Route path="/purchases" element={<ProtectedRoute><Purchases /></ProtectedRoute>} />
+                        <Route path="/purchase-returns" element={<ProtectedRoute><PurchaseReturns /></ProtectedRoute>} />
+                        <Route path="/deposit-sources" element={<ProtectedRoute><DepositSources /></ProtectedRoute>} />
+                        <Route path="/deposits" element={<ProtectedRoute><Deposits /></ProtectedRoute>} />
+                        <Route path="/expense-categories" element={<ProtectedRoute><ExpenseCategories /></ProtectedRoute>} />
+                        <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+                        <Route path="/whatsapp-management" element={<ProtectedRoute><WhatsAppManagement /></ProtectedRoute>} />
+                        <Route path="/whatsapp-campaigns" element={<ProtectedRoute><WhatsAppCampaigns /></ProtectedRoute>} />
+                        <Route path="/units" element={<ProtectedRoute><Units /></ProtectedRoute>} />
+                        <Route path="/price-types" element={<ProtectedRoute><PriceTypes /></ProtectedRoute>} />
+                        <Route path="/payment-methods" element={<ProtectedRoute><PaymentMethods /></ProtectedRoute>} />
+                        <Route path="/printer-settings" element={<ProtectedRoute><PrinterSettings /></ProtectedRoute>} />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </SettingsProvider>
+                  </ShiftProvider>
+                </AuthProvider>
+              </ThemeProvider>
+            </AppProvider>
           </RouteCleanup>
         </Router>
       </TooltipProvider>

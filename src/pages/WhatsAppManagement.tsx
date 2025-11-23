@@ -35,11 +35,14 @@ import {
   Loader2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { getQRColors } from "@/lib/theme.config";
+import { useTheme } from "next-themes";
 import QRCodeLib from "qrcode";
 
 const WhatsAppManagement = () => {
   const { toast } = useToast();
   const { can } = useAuth();
+  const { theme } = useTheme();
   const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
   const [addDialog, setAddDialog] = useState(false);
   const [qrDialog, setQrDialog] = useState(false);
@@ -258,12 +261,13 @@ const WhatsAppManagement = () => {
 
             // Convert QR code text to image
             try {
+              const qrColors = getQRColors((theme as 'light' | 'dark') || 'light');
               const qrImageUrl = await QRCodeLib.toDataURL(state.qrCode, {
                 width: 400,
                 margin: 2,
                 color: {
-                  dark: "#000000",
-                  light: "#FFFFFF",
+                  dark: qrColors.foreground,
+                  light: qrColors.background,
                 },
               });
               setQrImage(qrImageUrl);
@@ -584,8 +588,8 @@ const WhatsAppManagement = () => {
                       <TableCell>
                         {account.lastConnectedAt
                           ? new Date(account.lastConnectedAt).toLocaleString(
-                              "ar"
-                            )
+                            "ar"
+                          )
                           : "-"}
                       </TableCell>
                       <TableCell>

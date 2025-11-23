@@ -8,17 +8,28 @@ import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
 import {
   Settings as SettingsIcon,
-  Printer,
-  CreditCard,
   Store,
   Database,
-  AlertTriangle,
+  Download,
+  Upload,
+  Trash2,
+  FileJson,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/use-settings";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/indexedDB";
+import { useThemeContext } from "@/contexts/ThemeContext";
+import { AVAILABLE_THEMES } from "@/lib/theme.config";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Palette, Moon, Sun } from "lucide-react";
 
 const Settings = () => {
   const { can } = useAuth();
@@ -32,6 +43,7 @@ const Settings = () => {
     loading,
   } = useSettings();
   const [formData, setFormData] = useState<{ [key: string]: string }>({});
+  const { mode, colorScheme, setMode, setColorScheme, toggleMode } = useThemeContext();
 
   useEffect(() => {
     // تحميل جميع الإعدادات في formData
@@ -87,6 +99,203 @@ const Settings = () => {
     return value === "true" || value === "1";
   };
 
+  const handleExportData = async () => {
+    if (!can("settings", "edit")) {
+      toast({
+        title: "غير مصرح",
+        description: "ليس لديك صلاحية لتصدير البيانات",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({ title: "جاري تصدير البيانات...", description: "يرجى الانتظار" });
+
+      // Get all data from all stores
+      const allData = {
+        products: await db.getAll("products"),
+        productCategories: await db.getAll("productCategories"),
+        productUnits: await db.getAll("productUnits"),
+        units: await db.getAll("units"),
+        priceTypes: await db.getAll("priceTypes"),
+        customers: await db.getAll("customers"),
+        suppliers: await db.getAll("suppliers"),
+        invoices: await db.getAll("invoices"),
+        shifts: await db.getAll("shifts"),
+        expenseItems: await db.getAll("expenseItems"),
+        expenseCategories: await db.getAll("expenseCategories"),
+        deposits: await db.getAll("deposits"),
+        depositSources: await db.getAll("depositSources"),
+        salesReturns: await db.getAll("salesReturns"),
+        purchaseReturns: await db.getAll("purchaseReturns"),
+        purchases: await db.getAll("purchases"),
+        employees: await db.getAll("employees"),
+        paymentMethods: await db.getAll("paymentMethods"),
+        settings: await db.getAll("settings"),
+        exportDate: new Date().toISOString(),
+        version: "1.0",
+      };
+
+      const json = JSON.stringify(allData, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `backup_${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "تم تصدير البيانات بنجاح",
+        description: "تم حفظ ملف النسخة الاحتياطية",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "خطأ في التصدير",
+        description: "حدث خطأ أثناء تصدير البيانات",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportData = async (file: File) => {
+    if (!can("settings", "edit")) {
+      toast({
+        title: "غير مصرح",
+        description: "ليس لديك صلاحية لاستيراد البيانات",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "⚠️ تحذير: سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة!\n\nهل أنت متأكد؟"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      toast({ title: "جاري استيراد البيانات...", description: "يرجى الانتظار" });
+
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Validate data structure
+      if (!data.exportDate || !data.version) {
+        throw new Error("Invalid backup file format");
+      }
+
+      // Import all stores
+      const stores = [
+        "products",
+        "productCategories",
+        "productUnits",
+        "units",
+        "priceTypes",
+        "customers",
+        "suppliers",
+        "invoices",
+        "shifts",
+        "expenseItems",
+        "expenseCategories",
+        "deposits",
+        "depositSources",
+        "salesReturns",
+        "purchaseReturns",
+        "purchases",
+        "employees",
+        "paymentMethods",
+        "settings",
+      ];
+
+      for (const storeName of stores) {
+        if (data[storeName] && Array.isArray(data[storeName])) {
+          // Clear existing data
+          const allItems = await db.getAll(storeName);
+          for (const item of allItems) {
+            await db.delete(storeName, (item as any).id);
+          }
+
+          // Add imported data
+          for (const item of data[storeName]) {
+            await db.add(storeName, item);
+          }
+        }
+      }
+
+      toast({
+        title: "تم استيراد البيانات بنجاح",
+        description: "تم استعادة جميع البيانات من النسخة الاحتياطية",
+      });
+
+      // Reload page to refresh all data
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (error) {
+      console.error("Import error:", error);
+      toast({
+        title: "خطأ في الاستيراد",
+        description: "حدث خطأ أثناء استيراد البيانات. تأكد من صحة الملف.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteOldShifts = async (beforeDate: string) => {
+    if (!can("settings", "edit")) {
+      toast({
+        title: "غير مصرح",
+        description: "ليس لديك صلاحية لحذف البيانات",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!beforeDate) {
+      toast({
+        title: "يرجى اختيار التاريخ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `⚠️ تحذير: سيتم حذف جميع الورديات المغلقة قبل ${beforeDate}\n\nهل أنت متأكد؟`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const allShifts = await db.getAll<any>("shifts");
+      const cutoffDate = new Date(beforeDate);
+      let deletedCount = 0;
+
+      for (const shift of allShifts) {
+        if (
+          shift.closedAt &&
+          new Date(shift.closedAt) < cutoffDate
+        ) {
+          await db.delete("shifts", shift.id);
+          deletedCount++;
+        }
+      }
+
+      toast({
+        title: "تم الحذف بنجاح",
+        description: `تم حذف ${deletedCount} وردية`,
+      });
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast({
+        title: "خطأ في الحذف",
+        description: "حدث خطأ أثناء حذف البيانات",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleResetDatabase = async () => {
     if (!can("settings", "edit")) {
       toast({
@@ -99,8 +308,8 @@ const Settings = () => {
 
     const confirmed = window.confirm(
       "⚠️ تحذير: سيتم حذف قاعدة البيانات القديمة وإنشاء واحدة جديدة!\n\n" +
-        "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
-        "هل أنت متأكد؟"
+      "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
+      "هل أنت متأكد؟"
     );
 
     if (!confirmed) return;
@@ -163,10 +372,9 @@ const Settings = () => {
         <Tabs defaultValue="general" className="space-y-4">
           <TabsList>
             <TabsTrigger value="general">عام</TabsTrigger>
-            <TabsTrigger value="printers">الطابعات</TabsTrigger>
-            <TabsTrigger value="payment">تطبيقات الدفع</TabsTrigger>
+            <TabsTrigger value="theme">الثيمات والألوان</TabsTrigger>
             <TabsTrigger value="store">بيانات المتجر</TabsTrigger>
-            <TabsTrigger value="maintenance">الصيانة</TabsTrigger>
+            <TabsTrigger value="backup">النسخ الاحتياطي</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -233,85 +441,101 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="printers">
+          <TabsContent value="theme">
             <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Printer className="h-5 w-5" />
-                  إعدادات الطابعات
-                </h2>
-                <Button onClick={() => navigate("/printer-settings")}>
-                  إعدادات الطباعة الحرارية
-                </Button>
-              </div>
-              <div className="space-y-4">
-                <div className="bg-muted p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2">الطباعة الحرارية</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    للحصول على إعدادات الطباعة الحرارية الكاملة (80mm/58mm)،
-                    اختيار الطابعة، والطباعة التلقائية، اضغط على الزر أعلاه.
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                الثيمات والألوان
+              </h2>
+              <div className="space-y-6">
+                <div>
+                  <Label className="text-base font-semibold mb-3 block">
+                    🎨 اختر نظام الألوان المفضل
+                  </Label>
+                  <Select value={colorScheme} onValueChange={(value: any) => setColorScheme(value)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AVAILABLE_THEMES.map((theme) => (
+                        <SelectItem key={theme.id} value={theme.id}>
+                          <span className="flex items-center gap-2">
+                            <span>{theme.icon}</span>
+                            <span>{theme.name}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    سيتم تطبيق نظام الألوان على جميع الرسوم البيانية والواجهات
                   </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/printer-settings")}
-                  >
-                    <Printer className="h-4 w-4 ml-2" />
-                    فتح إعدادات الطابعة
-                  </Button>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold mb-3 block">
+                    🌗 الوضع الضوئي
+                  </Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card
+                      className={`p- 4 cursor - pointer transition - all border - 2 ${mode === 'light' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                        }`}
+                      onClick={() => setMode('light')}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <Sun className={`h - 8 w - 8 ${mode === 'light' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <span className="font-semibold">الوضع النهاري</span>
+                      </div>
+                    </Card>
+
+                    <Card
+                      className={`p - 4 cursor - pointer transition - all border - 2 ${mode === 'dark' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                        } `}
+                      onClick={() => setMode('dark')}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <Moon className={`h - 8 w - 8 ${mode === 'dark' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <span className="font-semibold">الوضع الليلي</span>
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold mb-3 block">
+                    👁️ معاينة الألوان
+                  </Label>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-primary shadow-md"></div>
+                      <span className="text-xs">رئيسي</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-secondary shadow-md"></div>
+                      <span className="text-xs">ثانوي</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-accent shadow-md"></div>
+                      <span className="text-xs">تكميلي</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-success shadow-md"></div>
+                      <span className="text-xs">نجاح</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-muted p-4 rounded-lg">
+                  <h3 className="font-semibold mb-2">ℹ️ ملاحظة</h3>
+                  <p className="text-sm text-muted-foreground">
+                    التغييرات تُطبق فوراً وتُحفظ تلقائياً! جميع الألوان في التطبيق ستتغير حسب اختيارك.
+                  </p>
                 </div>
               </div>
             </Card>
           </TabsContent>
 
-          <TabsContent value="payment">
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  تطبيقات الدفع الإلكتروني
-                </h2>
-                <Button>إضافة تطبيق</Button>
-              </div>
-              <div className="space-y-4">
-                <Card className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold">فوري</h3>
-                      <p className="text-sm text-muted-foreground">
-                        نسبة العمولة: 2%
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        تعديل
-                      </Button>
-                      <Button size="sm" variant="destructive">
-                        حذف
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold">فودافون كاش</h3>
-                      <p className="text-sm text-muted-foreground">
-                        نسبة العمولة: 1.5%
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        تعديل
-                      </Button>
-                      <Button size="sm" variant="destructive">
-                        حذف
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            </Card>
-          </TabsContent>
+
 
           <TabsContent value="store">
             <Card className="p-6">
@@ -381,49 +605,101 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="maintenance">
-            <Card className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Database className="h-6 w-6 text-primary" />
-                <h2 className="text-xl font-bold">صيانة قاعدة البيانات</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                  <div className="flex gap-3">
-                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-1" />
-                    <div>
-                      <h3 className="font-bold text-amber-900 dark:text-amber-100 mb-2">
-                        إعادة تهيئة قاعدة البيانات
-                      </h3>
-                      <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                        إذا واجهت أخطاء مثل "One of the specified object stores
-                        was not found"، فهذا يعني أن قاعدة البيانات بحاجة إلى
-                        إعادة تهيئة.
-                      </p>
-                      <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                        <strong>ملاحظة:</strong> سيتم حذف قاعدة البيانات القديمة
-                        وإنشاء واحدة جديدة تحتوي على جميع الـ object stores
-                        المطلوبة بما في ذلك:
-                      </p>
-                      <ul className="text-sm text-amber-800 dark:text-amber-200 list-disc list-inside mb-4 space-y-1">
-                        <li>مصادر الإيداعات (depositSources)</li>
-                        <li>الإيداعات (deposits)</li>
-                        <li>فئات المصروفات (expenseCategories)</li>
-                        <li>المصروفات (expenseItems)</li>
-                      </ul>
-                      <Button
-                        onClick={handleResetDatabase}
-                        variant="destructive"
-                        className="gap-2"
-                      >
-                        <Database className="h-4 w-4" />
-                        إعادة تهيئة قاعدة البيانات
-                      </Button>
-                    </div>
+          <TabsContent value="backup">
+            <div className="space-y-6">
+              {/* Export Section */}
+              <Card className="p-6 border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Download className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  <h2 className="text-xl font-bold">📤 تصدير البيانات (Backup)</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  احفظ نسخة احتياطية كاملة من جميع بيانات النظام (منتجات، فواتير، ورديات، عملاء، إلخ...)
+                </p>
+                <Button onClick={handleExportData} className="gap-2">
+                  <FileJson className="h-4 w-4" />
+                  تحميل النسخة الاحتياطية (JSON)
+                </Button>
+              </Card>
+
+              {/* Import Section */}
+              <Card className="p-6 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Upload className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-xl font-bold">📥 استيراد البيانات (Restore)</h2>
+                </div>
+                <div className="space-y-4">
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 dark:text-blue-100 mb-2">
+                      <strong>⚠️ تحذير:</strong> سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة!
+                    </p>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      تأكد من أن ملف النسخة الاحتياطية صحيح قبل الاستيراد.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="backup-file">اختر ملف النسخة الاحتياطية</Label>
+                    <Input
+                      id="backup-file"
+                      type="file"
+                      accept=".json"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImportData(file);
+                      }}
+                      className="mt-2"
+                    />
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              {/* Delete Old Data Section */}
+              <Card className="p-6 border-red-200 dark:border-red-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  <h2 className="text-xl font-bold">🗑️ حذف البيانات القديمة</h2>
+                </div>
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    حذف الورديات المغلقة قبل تاريخ معين لتوفير المساحة
+                  </p>
+                  <div>
+                    <Label htmlFor="delete-before-date">حذف الورديات المغلقة قبل:</Label>
+                    <Input
+                      id="delete-before-date"
+                      type="date"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleDeleteOldShifts(e.target.value);
+                        }
+                      }}
+                      className="mt-2"
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              {/* Reset Database Section */}
+              <Card className="p-6 border-amber-200 dark:border-amber-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Database className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                  <h2 className="text-xl font-bold">⚙️ إعادة تهيئة قاعدة البيانات</h2>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                    <strong>استخدم هذا فقط</strong> إذا واجهت أخطاء في قاعدة البيانات. سيتم حذف كل البيانات وإعادة إنشاء قاعدة بيانات جديدة.
+                  </p>
+                  <Button
+                    onClick={handleResetDatabase}
+                    variant="destructive"
+                    className="gap-2"
+                  >
+                    <Database className="h-4 w-4" />
+                    إعادة تهيئة قاعدة البيانات
+                  </Button>
+                </div>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

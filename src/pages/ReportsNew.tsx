@@ -70,20 +70,17 @@ import {
 } from "@/lib/indexedDB";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { useToast } from "@/hooks/use-toast";
-
-const COLORS = [
-  "#0088FE",
-  "#00C49F",
-  "#FFBB28",
-  "#FF8042",
-  "#8884d8",
-  "#82ca9d",
-];
+import { getChartColors } from "@/lib/theme.config";
+import { useTheme } from "next-themes";
 
 const Reports = () => {
   const { getSetting } = useSettingsContext();
   const currency = getSetting("currency") || "EGP";
   const { toast } = useToast();
+  const { theme } = useTheme();
+
+  // الحصول على ألوان الرسوم البيانية ديناميكياً
+  const chartColors = getChartColors('green', (theme as 'light' | 'dark') || 'light');
 
   // States للبيانات
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -635,9 +632,8 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <div
-                className={`text-2xl font-bold ${
-                  netProfit >= 0 ? "text-green-600" : "text-red-600"
-                }`}
+                className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
               >
                 {formatCurrency(netProfit)}
               </div>
@@ -719,7 +715,7 @@ const Reports = () => {
                     type="monotone"
                     dataKey="total"
                     name="المبيعات"
-                    stroke="#8884d8"
+                    stroke={chartColors[0]}
                     strokeWidth={2}
                   />
                 </LineChart>
@@ -753,7 +749,7 @@ const Reports = () => {
                     {salesByPaymentMethod.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
+                        fill={chartColors[index % chartColors.length]}
                       />
                     ))}
                   </Pie>
@@ -782,7 +778,7 @@ const Reports = () => {
                   <Tooltip
                     formatter={(value) => formatCurrency(value as number)}
                   />
-                  <Bar dataKey="total" name="المبيعات" fill="#82ca9d" />
+                  <Bar dataKey="total" name="المبيعات" fill={chartColors[1]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -805,7 +801,7 @@ const Reports = () => {
                   <Tooltip
                     formatter={(value) => formatCurrency(value as number)}
                   />
-                  <Bar dataKey="sales" name="المبيعات" fill="#8884d8" />
+                  <Bar dataKey="sales" name="المبيعات" fill={chartColors[0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -957,8 +953,8 @@ const Reports = () => {
                       inv.paymentStatus === "paid"
                         ? "مدفوعة"
                         : inv.paymentStatus === "partial"
-                        ? "جزئي"
-                        : "غير مدفوعة",
+                          ? "جزئي"
+                          : "غير مدفوعة",
                   }))}
                   columns={[
                     { header: "رقم الفاتورة", dataKey: "id" },
@@ -1005,15 +1001,15 @@ const Reports = () => {
                               invoice.paymentStatus === "paid"
                                 ? "default"
                                 : invoice.paymentStatus === "partial"
-                                ? "secondary"
-                                : "destructive"
+                                  ? "secondary"
+                                  : "destructive"
                             }
                           >
                             {invoice.paymentStatus === "paid"
                               ? "مدفوعة"
                               : invoice.paymentStatus === "partial"
-                              ? "جزئي"
-                              : "غير مدفوعة"}
+                                ? "جزئي"
+                                : "غير مدفوعة"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-bold">

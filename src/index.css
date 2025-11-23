@@ -50,21 +50,15 @@ All colors MUST be HSL.
     --warning-foreground: 0 0% 100%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(
-      135deg,
-      hsl(152 65% 25%),
-      hsl(152 70% 35%)
-    );
-    --gradient-secondary: linear-gradient(
-      135deg,
-      hsl(215 85% 55%),
-      hsl(215 85% 65%)
-    );
-    --gradient-success: linear-gradient(
-      135deg,
-      hsl(152 65% 35%),
-      hsl(152 70% 45%)
-    );
+    --gradient-primary: linear-gradient(135deg,
+        hsl(152 65% 25%),
+        hsl(152 70% 35%));
+    --gradient-secondary: linear-gradient(135deg,
+        hsl(215 85% 55%),
+        hsl(215 85% 65%));
+    --gradient-success: linear-gradient(135deg,
+        hsl(152 65% 35%),
+        hsl(152 70% 45%));
 
     /* Shadows */
     --shadow-sm: 0 2px 4px -1px hsl(0 0% 0% / 0.06);
@@ -86,6 +80,30 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 152 65% 25%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 152 65% 25%;
+
+    /* Chart Colors - Dynamic */
+    --chart-1: hsl(152, 65%, 35%);
+    --chart-2: hsl(215, 85%, 55%);
+    --chart-3: hsl(38, 92%, 50%);
+    --chart-4: hsl(0, 84%, 60%);
+    --chart-5: hsl(152, 65%, 50%);
+    --chart-6: hsl(215, 85%, 70%);
+    --chart-7: hsl(38, 92%, 65%);
+    --chart-8: hsl(0, 84%, 75%);
+
+    /* Print Colors */
+    --print-header: #1a6644;
+    --print-subheader: #daa520;
+    --print-border: #000000;
+    --print-background: #f8f9fa;
+    --print-alternate-row: #f2f2f2;
+    --print-text: #1a1a1a;
+    --print-text-light: #666666;
+    --print-text-lighter: #888888;
+
+    /* QR Code Colors */
+    --qr-foreground: #000000;
+    --qr-background: #ffffff;
   }
 
   .dark {
@@ -124,21 +142,15 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 222.2 47% 11%;
 
-    --gradient-primary: linear-gradient(
-      135deg,
-      hsl(152 70% 45%),
-      hsl(152 70% 55%)
-    );
-    --gradient-secondary: linear-gradient(
-      135deg,
-      hsl(215 85% 60%),
-      hsl(215 85% 70%)
-    );
-    --gradient-success: linear-gradient(
-      135deg,
-      hsl(152 70% 45%),
-      hsl(152 70% 55%)
-    );
+    --gradient-primary: linear-gradient(135deg,
+        hsl(152 70% 45%),
+        hsl(152 70% 55%));
+    --gradient-secondary: linear-gradient(135deg,
+        hsl(215 85% 60%),
+        hsl(215 85% 70%));
+    --gradient-success: linear-gradient(135deg,
+        hsl(152 70% 45%),
+        hsl(152 70% 55%));
 
     --shadow-sm: 0 2px 4px -1px hsl(0 0% 0% / 0.3);
     --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.4);
@@ -154,6 +166,30 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217.2 32.6% 20%;
     --sidebar-ring: 152 70% 45%;
+
+    /* Chart Colors - Dynamic (Dark Mode) */
+    --chart-1: hsl(152, 70%, 45%);
+    --chart-2: hsl(215, 85%, 60%);
+    --chart-3: hsl(38, 92%, 50%);
+    --chart-4: hsl(0, 84%, 60%);
+    --chart-5: hsl(152, 70%, 60%);
+    --chart-6: hsl(215, 85%, 75%);
+    --chart-7: hsl(38, 92%, 65%);
+    --chart-8: hsl(0, 84%, 75%);
+
+    /* Print Colors (same as light for consistency in print) */
+    --print-header: #1a6644;
+    --print-subheader: #daa520;
+    --print-border: #000000;
+    --print-background: #f8f9fa;
+    --print-alternate-row: #f2f2f2;
+    --print-text: #1a1a1a;
+    --print-text-light: #666666;
+    --print-text-lighter: #888888;
+
+    /* QR Code Colors (Dark Mode) */
+    --qr-foreground: #ffffff;
+    --qr-background: #1a1a1a;
   }
 }
 

@@ -55,7 +55,6 @@ const EmployeeAdvances = () => {
     employeeId: "",
     amount: "",
     reason: "",
-    deductionAmount: "",
     notes: "",
   });
 
@@ -105,9 +104,6 @@ const EmployeeAdvances = () => {
       }
 
       const amount = parseFloat(formData.amount);
-      const deductionAmount = formData.deductionAmount
-        ? parseFloat(formData.deductionAmount)
-        : 0;
 
       const newAdvance: EmployeeAdvance = {
         id: Date.now().toString(),
@@ -118,7 +114,6 @@ const EmployeeAdvances = () => {
         status: "pending",
         paidAmount: 0,
         remainingAmount: amount,
-        deductionAmount,
         userId: user?.id || "",
         userName: user?.name || "",
         notes: formData.notes,
@@ -137,7 +132,6 @@ const EmployeeAdvances = () => {
         employeeId: "",
         amount: "",
         reason: "",
-        deductionAmount: "",
         notes: "",
       });
     } catch (error) {
@@ -170,34 +164,11 @@ const EmployeeAdvances = () => {
       };
 
       await db.update("employeeAdvances", updatedAdvance);
-
-      // إذا كان هناك خصم شهري محدد، أنشئ خصم تلقائي من الراتب
-      if (advance.deductionAmount && advance.deductionAmount > 0) {
-        const deduction = {
-          id: `advance-deduction-${advance.id}-${Date.now()}`,
-          employeeId: advance.employeeId,
-          employeeName: advance.employeeName,
-          amount: advance.deductionAmount,
-          type: "fixed" as const, // خصم ثابت شهري
-          reason: `خصم سُلفة: ${advance.reason}`,
-          startDate: new Date().toISOString().split("T")[0],
-          status: "active" as const,
-          userId: user?.id || "",
-          userName: user?.name || "",
-          notes: `خصم تلقائي من الراتب للسُلفة رقم ${advance.id}. المبلغ الكلي: ${advance.amount} ج.م`,
-          createdAt: new Date().toISOString(),
-        };
-
-        await db.add("employeeDeductions", deduction);
-      }
-
       await loadData();
 
       toast({
         title: "تم اعتماد السُلفة",
-        description: advance.deductionAmount
-          ? `تم إنشاء خصم شهري بقيمة ${advance.deductionAmount} ج.م من راتب الموظف`
-          : undefined,
+        description: "السُلفة معتمدة ومتاحة للخصم من الراتب",
       });
     } catch (error) {
       console.error("Error approving advance:", error);
@@ -370,7 +341,6 @@ const EmployeeAdvances = () => {
                 <TableHead>المبلغ</TableHead>
                 <TableHead>السبب</TableHead>
                 <TableHead>الحالة</TableHead>
-                <TableHead>الخصم الشهري</TableHead>
                 <TableHead>المتبقي</TableHead>
                 <TableHead>التاريخ</TableHead>
                 <TableHead>إجراءات</TableHead>
@@ -379,7 +349,7 @@ const EmployeeAdvances = () => {
             <TableBody>
               {filteredAdvances.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <p className="text-muted-foreground">لا توجد سُلف</p>
                   </TableCell>
                 </TableRow>
@@ -394,11 +364,6 @@ const EmployeeAdvances = () => {
                     </TableCell>
                     <TableCell>{advance.reason}</TableCell>
                     <TableCell>{getStatusBadge(advance.status)}</TableCell>
-                    <TableCell>
-                      {advance.deductionAmount
-                        ? `${advance.deductionAmount.toFixed(2)} ج.م`
-                        : "-"}
-                    </TableCell>
                     <TableCell>
                       {advance.remainingAmount
                         ? `${advance.remainingAmount.toFixed(2)} ج.م`
@@ -505,21 +470,7 @@ const EmployeeAdvances = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>الخصم الشهري (ج.م)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.deductionAmount}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      deductionAmount: e.target.value,
-                    })
-                  }
-                  placeholder="مثال: 200"
-                />
-              </div>
+
 
               <div className="space-y-2">
                 <Label>ملاحظات</Label>

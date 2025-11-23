@@ -140,149 +140,31 @@ export const POSHeader = () => {
     if (!currentShift || !user) return;
 
     try {
-      // حساب المبيعات والمصروفات بشكل ديناميكي من الفواتير
-      const invoices = await db.getAll<any>("invoices");
-      const expenses = await db.getAll<any>("expenses");
-      const cashMovements = await db.getAll<any>("cashMovements");
-      const paymentMethods = await db.getAll<any>("paymentMethods");
+      // استخدام الدوال الموحدة من calculationService
+      const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
 
-      const shiftInvoices = invoices.filter(
-        (inv: any) =>
-          inv.shiftId === currentShift.id ||
-          inv.shiftId === currentShift.id.toString()
-      );
-      const shiftExpenses = expenses.filter(
-        (exp: any) =>
-          exp.shiftId === currentShift.id ||
-          exp.shiftId === currentShift.id.toString()
-      );
-      const shiftMovements = cashMovements.filter(
-        (m: any) =>
-          m.shiftId === currentShift.id ||
-          m.shiftId === currentShift.id.toString()
-      );
+      const sales = await calculateShiftSales(currentShift.id);
+      const cashSummary = await calculateExpectedCash(currentShift.id);
 
-      const totalSales = shiftInvoices.reduce(
-        (sum: number, inv: any) => sum + (inv.total || 0),
-        0
-      );
-      const totalExpenses = shiftExpenses.reduce(
-        (sum: number, exp: any) => sum + (exp.amount || 0),
-        0
-      );
-
-      const cashIn = shiftMovements
-        .filter((m: any) => m.type === "in")
-        .reduce((sum: number, m: any) => sum + m.amount, 0);
-      const cashOut = shiftMovements
-        .filter((m: any) => m.type === "out")
-        .reduce((sum: number, m: any) => sum + m.amount, 0);
-
-      // حساب طرق الدفع بشكل ديناميكي من الفواتير
-      let cashSales = 0;
-      let cardSales = 0;
-      let walletSales = 0;
-      let returns = 0;
-
-      shiftInvoices.forEach((inv: any) => {
-        // التعامل مع الفواتير الجديدة التي تحتوي على paymentMethodAmounts
-        if (
-          inv.paymentMethodAmounts &&
-          Object.keys(inv.paymentMethodAmounts).length > 0
-        ) {
-          Object.entries(inv.paymentMethodAmounts).forEach(
-            ([methodId, amount]: [string, any]) => {
-              const method = paymentMethods.find(
-                (pm: any) => pm.id === methodId || pm.id === methodId.toString()
-              );
-
-              let type = method?.type;
-              if (!type) {
-                const methodIdLower = methodId.toLowerCase();
-                if (
-                  methodIdLower.includes("cash") ||
-                  methodIdLower === "نقدي"
-                ) {
-                  type = "cash";
-                } else if (
-                  methodIdLower.includes("visa") ||
-                  methodIdLower.includes("card") ||
-                  methodIdLower.includes("بطاقة") ||
-                  methodIdLower.includes("bank")
-                ) {
-                  type = "card";
-                } else if (
-                  methodIdLower.includes("wallet") ||
-                  methodIdLower.includes("محفظة")
-                ) {
-                  type = "wallet";
-                }
-              }
-
-              const amountValue = parseFloat(amount) || 0;
-              if (type === "cash") {
-                cashSales += amountValue;
-              } else if (
-                type === "card" ||
-                type === "visa" ||
-                type === "bank_transfer"
-              ) {
-                cardSales += amountValue;
-              } else if (type === "wallet") {
-                walletSales += amountValue;
-              }
-            }
-          );
-        } else if (inv.paymentType) {
-          const total = inv.total || 0;
-          if (inv.paymentType === "cash" || inv.paymentType === "نقدي") {
-            cashSales += total;
-          } else if (
-            inv.paymentType === "card" ||
-            inv.paymentType === "visa" ||
-            inv.paymentType === "بطاقة"
-          ) {
-            cardSales += total;
-          } else if (
-            inv.paymentType === "wallet" ||
-            inv.paymentType === "محفظة"
-          ) {
-            walletSales += total;
-          }
-        } else {
-          cashSales += inv.total || 0;
-        }
-
-        if (inv.returns) returns += inv.returns;
-      });
-
-      const expectedCash =
-        currentShift.startingCash +
-        cashSales +
-        cashIn -
-        cashOut -
-        totalExpenses -
-        returns;
-
-      const difference = actualCash - expectedCash;
+      const difference = actualCash - cashSummary.expectedCash;
 
       const updatedShift: Shift = {
         ...currentShift,
         endTime: new Date().toISOString(),
-        expectedCash,
+        expectedCash: cashSummary.expectedCash,
         actualCash: actualCash,
         difference: difference,
         status: "closed",
         closedBy: user?.name || "غير معروف",
         sales: {
-          totalInvoices: shiftInvoices.length,
-          totalAmount: totalSales,
-          cashSales,
-          cardSales,
-          walletSales,
-          returns,
+          totalInvoices: sales.totalInvoices,
+          totalAmount: sales.totalSales,
+          cashSales: sales.cashSales,
+          cardSales: sales.cardSales,
+          walletSales: sales.walletSales,
+          returns: sales.returns,
         },
-        expenses: totalExpenses,
+        expenses: cashSummary.expenses,
       };
 
       await db.update("shifts", updatedShift);
@@ -292,7 +174,7 @@ export const POSHeader = () => {
       // تسجيل الخروج بعد إغلاق الوردية
       toast({
         title: "تم إغلاق الوردية بنجاح",
-        description: `إجمالي المبيعات: ${totalSales.toFixed(2)} جنيه`,
+        description: `إجمالي المبيعات: ${sales.totalSales.toFixed(2)} جنيه`,
       });
 
       // الانتظار قليلاً ثم تسجيل الخروج
@@ -322,107 +204,22 @@ export const POSHeader = () => {
   };
 
   const loadDailySummary = async () => {
-    await db.init();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    try {
+      // استخدام الدالة الموحدة من calculationService
+      const { calculateDailySummary } = await import('@/lib/calculationService');
 
-    const invoices = await db.getAll<any>("invoices");
-    const expenses = await db.getAll<any>("expenses");
-    const salesReturns = await db.getAll<any>("salesReturns");
-    const paymentMethods = await db.getAll<any>("paymentMethods");
+      const summary = await calculateDailySummary();
 
-    // تصفية البيانات اليومية
-    const todayInvoices = invoices.filter((inv: any) => {
-      const invDate = new Date(inv.createdAt);
-      invDate.setHours(0, 0, 0, 0);
-      return invDate.getTime() === today.getTime();
-    });
-
-    const todayExpenses = expenses.filter((exp: any) => {
-      const expDate = new Date(exp.createdAt);
-      expDate.setHours(0, 0, 0, 0);
-      return expDate.getTime() === today.getTime();
-    });
-
-    const todayReturns = salesReturns.filter((ret: any) => {
-      const retDate = new Date(ret.createdAt);
-      retDate.setHours(0, 0, 0, 0);
-      return retDate.getTime() === today.getTime();
-    });
-
-    // حساب الملخص
-    const totalSales = todayInvoices.reduce(
-      (sum: number, inv: any) => sum + (inv.total || 0),
-      0
-    );
-    const totalExpenses = todayExpenses.reduce(
-      (sum: number, exp: any) => sum + (exp.amount || 0),
-      0
-    );
-    const totalReturns = todayReturns.reduce(
-      (sum: number, ret: any) => sum + (ret.total || 0),
-      0
-    );
-
-    // حساب المبيعات لكل طريقة دفع بشكل ديناميكي
-    const paymentMethodSales: {
-      [key: string]: { name: string; amount: number };
-    } = {};
-
-    // تهيئة جميع طرق الدفع بقيمة 0
-    paymentMethods.forEach((method: any) => {
-      paymentMethodSales[method.id] = {
-        name: method.name,
-        amount: 0,
-      };
-    });
-
-    todayInvoices.forEach((inv: any) => {
-      // النظام الجديد - split payments
-      if (
-        inv.paymentMethodAmounts &&
-        Object.keys(inv.paymentMethodAmounts).length > 0
-      ) {
-        Object.entries(inv.paymentMethodAmounts).forEach(
-          ([methodId, amount]: [string, any]) => {
-            const amountValue = parseFloat(amount) || 0;
-
-            if (paymentMethodSales[methodId]) {
-              paymentMethodSales[methodId].amount += amountValue;
-            } else {
-              // إذا لم نجد الطريقة في النظام، نضيفها كطريقة مؤقتة
-              const method = inv.paymentMethods?.find?.(
-                (pm: any) => pm.id === methodId
-              );
-              paymentMethodSales[methodId] = {
-                name: method?.name || methodId,
-                amount: amountValue,
-              };
-            }
-          }
-        );
-      }
-      // النظام القديم - paymentType فقط
-      else if (inv.paymentType) {
-        const amount = inv.total || 0;
-        const cashMethod = paymentMethods.find((pm: any) => pm.type === "cash");
-
-        if (inv.paymentType === "cash" && cashMethod) {
-          paymentMethodSales[cashMethod.id].amount += amount;
-        }
-      }
-    });
-
-    setDailySummary({
-      invoiceCount: todayInvoices.length,
-      totalSales,
-      paymentMethodSales, // إضافة المبيعات حسب طرق الدفع
-      totalExpenses,
-      totalReturns,
-      netProfit: totalSales - totalExpenses - totalReturns,
-    });
-
-    setDailySummaryDialogOpen(true);
+      setDailySummary(summary);
+      setDailySummaryDialogOpen(true);
+    } catch (error) {
+      console.error('Error loading daily summary:', error);
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تحميل الملخص اليومي",
+        variant: "destructive",
+      });
+    }
   };
 
   const menuItems = [
@@ -603,10 +400,10 @@ export const POSHeader = () => {
                     {user?.role === "admin"
                       ? "مدير النظام"
                       : user?.role === "manager"
-                      ? "مدير"
-                      : user?.role === "cashier"
-                      ? "كاشير"
-                      : "محاسب"}
+                        ? "مدير"
+                        : user?.role === "cashier"
+                          ? "كاشير"
+                          : "محاسب"}
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -828,21 +625,19 @@ export const POSHeader = () => {
 
               {/* Net Profit */}
               <div
-                className={`border-2 rounded-lg p-4 ${
-                  dailySummary.netProfit >= 0
-                    ? "bg-emerald-50 border-emerald-400"
-                    : "bg-red-50 border-red-400"
-                }`}
+                className={`border-2 rounded-lg p-4 ${dailySummary.netProfit >= 0
+                  ? "bg-emerald-50 border-emerald-400"
+                  : "bg-red-50 border-red-400"
+                  }`}
               >
                 <h3 className="font-semibold mb-2 text-center">
                   {dailySummary.netProfit >= 0 ? "✅ صافي الربح" : "⚠️ الخسارة"}
                 </h3>
                 <p
-                  className={`text-3xl font-bold text-center ${
-                    dailySummary.netProfit >= 0
-                      ? "text-emerald-600"
-                      : "text-red-600"
-                  }`}
+                  className={`text-3xl font-bold text-center ${dailySummary.netProfit >= 0
+                    ? "text-emerald-600"
+                    : "text-red-600"
+                    }`}
                 >
                   {dailySummary.netProfit.toFixed(2)} جنيه
                 </p>

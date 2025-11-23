@@ -154,6 +154,7 @@ export async function deleteCashMovement(
 
 /**
  * الحصول على تفاصيل النقدية المتوقعة للوردية
+ * @deprecated استخدم calculateExpectedCash من calculationService بدلاً من ذلك
  */
 export async function getShiftCashSummary(shiftId: number): Promise<{
   startingCash: number;
@@ -165,38 +166,21 @@ export async function getShiftCashSummary(shiftId: number): Promise<{
   actualCash?: number;
   difference?: number;
 }> {
-  await db.init();
+  // استخدام الدالة الموحدة من calculationService
+  const { calculateExpectedCash } = await import('./calculationService');
+
+  const result = await calculateExpectedCash(shiftId.toString());
 
   const shift = await db.get<Shift>("shifts", shiftId.toString());
-  if (!shift) {
-    throw new Error("الوردية غير موجودة");
-  }
-
-  const cashMovements = await getCashMovementsSummary(shiftId);
-
-  // Get expenses for this shift
-  const allExpenses = await db.getAll<any>("expenses");
-  const shiftExpenses = allExpenses.filter(
-    (e) => e.shiftId === shiftId.toString() || e.shiftId === shiftId
-  );
-  const totalExpenses = shiftExpenses.reduce((sum, e) => sum + e.amount, 0);
-
-  const expectedCash =
-    shift.startingCash +
-    shift.sales.cashSales +
-    cashMovements.totalIn -
-    cashMovements.totalOut -
-    totalExpenses -
-    shift.sales.returns; // assuming returns are in cash
 
   return {
-    startingCash: shift.startingCash,
-    salesCash: shift.sales.cashSales,
-    cashIn: cashMovements.totalIn,
-    cashOut: cashMovements.totalOut,
-    expenses: totalExpenses,
-    expectedCash,
-    actualCash: shift.actualCash,
-    difference: shift.difference,
+    startingCash: result.startingCash,
+    salesCash: result.salesCash,
+    cashIn: result.cashIn,
+    cashOut: result.cashOut,
+    expenses: result.expenses,
+    expectedCash: result.expectedCash,
+    actualCash: shift?.actualCash,
+    difference: shift?.difference,
   };
 }

@@ -31,6 +31,8 @@ import {
 } from "@/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useSettings } from "@/hooks/use-settings";
+import { APP_DEFAULTS } from "@/lib/constants";
 
 interface Purchase {
   id: string;
@@ -51,6 +53,7 @@ interface Purchase {
 
 const PurchaseReturns = () => {
   const { user, can } = useAuth();
+  const { getSetting } = useSettings();
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -135,7 +138,11 @@ const PurchaseReturns = () => {
     }
 
     const subtotal = itemsToReturn.reduce((sum, item) => sum + item.total, 0);
-    const taxRate = 0.14;
+
+    // الحصول على نسبة الضريبة من الإعدادات أو استخدام القيمة الافتراضية
+    const taxRateSetting = getSetting('taxRate');
+    const taxRate = taxRateSetting ? parseFloat(taxRateSetting) / 100 : APP_DEFAULTS.TAX.DEFAULT_RATE / 100;
+
     const tax = subtotal * taxRate;
     const total = subtotal + tax;
 
@@ -247,19 +254,18 @@ const PurchaseReturns = () => {
                         <FileText className="h-4 w-4" />
                         <span className="font-bold">{returnDoc.id}</span>
                         <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            returnDoc.refundStatus === "completed"
-                              ? "bg-green-100 text-green-800"
-                              : returnDoc.refundStatus === "pending"
+                          className={`px-2 py-1 rounded text-xs ${returnDoc.refundStatus === "completed"
+                            ? "bg-green-100 text-green-800"
+                            : returnDoc.refundStatus === "pending"
                               ? "bg-yellow-100 text-yellow-800"
                               : "bg-red-100 text-red-800"
-                          }`}
+                            }`}
                         >
                           {returnDoc.refundStatus === "completed"
                             ? "مكتمل"
                             : returnDoc.refundStatus === "pending"
-                            ? "قيد الانتظار"
-                            : "مرفوض"}
+                              ? "قيد الانتظار"
+                              : "مرفوض"}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">

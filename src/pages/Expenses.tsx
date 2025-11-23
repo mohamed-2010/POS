@@ -122,9 +122,19 @@ const Expenses = () => {
         return;
       }
 
-      // Get current shift
+      // Get current active shift - CRITICAL: must exist!
       const shifts = await db.getAll<any>("shifts");
-      const currentShift = shifts.find((s) => !s.closedAt);
+      const currentShift = shifts.find((s) => s.status === "active");
+      console.log("currentShift", currentShift);
+
+      if (!currentShift) {
+        toast({
+          title: "يجب فتح وردية أولاً",
+          description: "لا يمكن إضافة مصروف بدون وردية مفتوحة",
+          variant: "destructive"
+        });
+        return;
+      }
 
       const newExpense: ExpenseItem = {
         id: Date.now().toString(),
@@ -134,7 +144,7 @@ const Expenses = () => {
         description: formData.description.trim(),
         userId: user?.id || "",
         userName: user?.username || "",
-        shiftId: currentShift?.id || "",
+        shiftId: currentShift.id,
         notes: formData.notes.trim(),
         createdAt: new Date().toISOString(),
       };

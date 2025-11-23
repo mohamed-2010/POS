@@ -73,7 +73,7 @@ export function ZReportDialog({
   const loadReport = async () => {
     setLoading(true);
     try {
-      // جلب بيانات الوردية الأساسية (فقط لعرض اسم الموظف ووقت البدء والرصد الافتتاحي)
+      // جلب بيانات الوردية الأساسية
       const shiftData = await db.get<Shift>("shifts", shiftId.toString());
       if (!shiftData) {
         toast.error("الوردية غير موجودة");
@@ -81,150 +81,32 @@ export function ZReportDialog({
         return;
       }
 
-      // جلب كل طرق الدفع من النظام
-      const allPaymentMethods = await db.getAll<any>("paymentMethods");
+      // استخدام الدوال الموحدة من calculationService
+      const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
 
-      // جلب كل الفواتير الخاصة بالوردية
-      const allInvoices = await db.getAll<any>("invoices");
-      const shiftInvoices = allInvoices.filter(
-        (inv) => inv.shiftId === shiftId.toString() || inv.shiftId === shiftId
-      );
+      const sales = await calculateShiftSales(shiftId.toString());
+      const cashSummary = await calculateExpectedCash(shiftId.toString());
 
-      // حساب إجمالي المبيعات وعدد الفواتير
-      const totalSales = shiftInvoices.reduce(
-        (sum, inv) => sum + (inv.total || 0),
-        0
-      );
-      const totalInvoices = shiftInvoices.length;
-
-      // حساب المبيعات لكل طريقة دفع بشكل ديناميكي
-      const paymentMethodSales: {
-        [key: string]: { name: string; amount: number; type: string };
-      } = {};
-
-      // تهيئة جميع طرق الدفع بقيمة 0
-      allPaymentMethods.forEach((method: any) => {
-        paymentMethodSales[method.id] = {
-          name: method.name,
-          amount: 0,
-          type: method.type || "other",
-        };
-      });
-
-      let cashSales = 0;
-      let returns = 0;
-
-      shiftInvoices.forEach((inv) => {
-        // التعامل مع الفواتير الجديدة التي تحتوي على paymentMethodAmounts
-        if (
-          inv.paymentMethodAmounts &&
-          Object.keys(inv.paymentMethodAmounts).length > 0
-        ) {
-          Object.entries(inv.paymentMethodAmounts).forEach(
-            ([methodId, amount]: [string, any]) => {
-              const amountValue = parseFloat(amount) || 0;
-
-              // البحث عن طريقة الدفع
-              if (paymentMethodSales[methodId]) {
-                paymentMethodSales[methodId].amount += amountValue;
-              } else {
-                // إذا لم نجد الطريقة في النظام، نضيفها كطريقة مؤقتة
-                const method = inv.paymentMethods?.find?.(
-                  (pm: any) =>
-                    pm.id === methodId || pm.id === methodId.toString()
-                );
-                paymentMethodSales[methodId] = {
-                  name: method?.name || methodId,
-                  amount: amountValue,
-                  type: method?.type || "other",
-                };
-              }
-
-              // حساب النقدي للنقدية المتوقعة
-              const paymentMethod = allPaymentMethods.find(
-                (pm: any) => pm.id === methodId
-              );
-              if (paymentMethod?.type === "cash") {
-                cashSales += amountValue;
-              }
-            }
-          );
-        }
-        // التعامل مع الفواتير القديمة التي تحتوي على paymentType فقط
-        else if (inv.paymentType) {
-          const total = inv.total || 0;
-          const cashMethod = allPaymentMethods.find(
-            (pm: any) => pm.type === "cash"
-          );
-
-          if (inv.paymentType === "cash" || inv.paymentType === "نقدي") {
-            if (cashMethod) {
-              paymentMethodSales[cashMethod.id].amount += total;
-            }
-            cashSales += total;
-          }
-        }
-        // إذا لم يكن هناك أي معلومات دفع، نعتبرها نقدية افتراضياً
-        else {
-          const cashMethod = allPaymentMethods.find(
-            (pm: any) => pm.type === "cash"
-          );
-          if (cashMethod) {
-            paymentMethodSales[cashMethod.id].amount += inv.total || 0;
-          }
-          cashSales += inv.total || 0;
-        }
-
-        // المرتجعات (لو موجودة في الفاتورة)
-        if (inv.returns) returns += inv.returns;
-      });
-
-      // جلب المصروفات
-      const allExpenses = await db.getAll<any>("expenses");
-      const shiftExpenses = allExpenses.filter(
-        (e) => e.shiftId === shiftId.toString() || e.shiftId === shiftId
-      );
-      const totalExpenses = shiftExpenses.reduce((sum, e) => sum + e.amount, 0);
-
-      // جلب الحركات النقدية
-      const allMovements = await db.getAll<any>("cashMovements");
-      const shiftMovements = allMovements.filter(
-        (m) => m.shiftId === shiftId.toString() || m.shiftId === shiftId
-      );
-      const cashIn = shiftMovements
-        .filter((m) => m.type === "in")
-        .reduce((sum, m) => sum + m.amount, 0);
-      const cashOut = shiftMovements
-        .filter((m) => m.type === "out")
-        .reduce((sum, m) => sum + m.amount, 0);
-
-      // النقدية المتوقعة
-      const expectedCash =
-        (shiftData.startingCash || 0) +
-        cashSales +
-        cashIn -
-        cashOut -
-        totalExpenses -
-        returns;
-
+      // تحديث الحالة
       setShift({
         ...shiftData,
         sales: {
-          totalInvoices,
-          totalAmount: totalSales,
-          cashSales,
-          cardSales: 0, // سيتم استبدالها بـ paymentMethodSales
-          walletSales: 0, // سيتم استبدالها بـ paymentMethodSales
-          returns,
+          totalInvoices: sales.totalInvoices,
+          totalAmount: sales.totalSales,
+          cashSales: sales.cashSales,
+          cardSales: sales.cardSales,
+          walletSales: sales.walletSales,
+          returns: sales.returns,
         },
       });
+
       setCashSummary({
-        cashIn,
-        cashOut,
-        expenses: totalExpenses,
-        expectedCash,
-        expensesList: shiftExpenses,
-        paymentMethodSales, // إضافة المبيعات حسب طرق الدفع
+        cashIn: cashSummary.cashIn,
+        cashOut: cashSummary.cashOut,
+        expenses: cashSummary.expenses,
+        expectedCash: cashSummary.expectedCash,
+        expensesList: cashSummary.expensesList,
+        paymentMethodSales: sales.paymentMethodBreakdown,
       });
     } catch (error) {
       console.error("Error loading Z report:", error);
@@ -396,30 +278,26 @@ export function ZReportDialog({
                     -{formatCurrency(cashSummary.cashOut)}
                   </span>
                 </div>
-                {cashSummary.expenses > 0 && (
-                  <>
-                    <Separator />
-                    <div className="flex justify-between">
-                      <span>المصروفات:</span>
-                      <span className="font-bold text-red-600">
-                        -{formatCurrency(cashSummary.expenses)}
-                      </span>
-                    </div>
-                    {cashSummary.expensesList &&
-                      cashSummary.expensesList.length > 0 && (
-                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          {cashSummary.expensesList.map(
-                            (exp: any, index: number) => (
-                              <div key={index} className="flex justify-between">
-                                <span>• {exp.description || exp.notes}</span>
-                                <span>{formatCurrency(exp.amount)}</span>
-                              </div>
-                            )
-                          )}
-                        </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span>المصروفات:</span>
+                  <span className="font-bold text-red-600">
+                    -{formatCurrency(cashSummary.expenses || 0)}
+                  </span>
+                </div>
+                {cashSummary.expensesList &&
+                  cashSummary.expensesList.length > 0 && (
+                    <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                      {cashSummary.expensesList.map(
+                        (exp: any, index: number) => (
+                          <div key={index} className="flex justify-between">
+                            <span>• {exp.description || exp.notes}</span>
+                            <span>{formatCurrency(exp.amount)}</span>
+                          </div>
+                        )
                       )}
-                  </>
-                )}
+                    </div>
+                  )}
               </CardContent>
             </Card>
 
@@ -572,13 +450,12 @@ export function ZReportDialog({
                 <div className="flex justify-between text-xl">
                   <span className="font-bold">الفرق:</span>
                   <span
-                    className={`font-bold ${
-                      difference > 0
-                        ? "text-green-600"
-                        : difference < 0
+                    className={`font-bold ${difference > 0
+                      ? "text-green-600"
+                      : difference < 0
                         ? "text-red-600"
                         : ""
-                    }`}
+                      }`}
                   >
                     {difference > 0 ? "+" : ""}
                     {formatCurrency(difference)}

@@ -384,159 +384,171 @@ const Inventory = () => {
   };
 
   // تصدير المنتجات إلى Excel
-  const exportToExcel = () => {
-    let htmlContent = `<!DOCTYPE html>
-<html dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <style>
-    table { border-collapse: collapse; width: 100%; direction: rtl; }
-    th, td { border: 1px solid #000; padding: 8px; text-align: right; }
-    th { background-color: #4CAF50; color: white; font-weight: bold; }
-    tr:nth-child(even) { background-color: #f2f2f2; }
-    .title { font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; }
-  </style>
-</head>
-<body>
-  <div class="title">قائمة المنتجات</div>
-  <table>
-    <tr>
-      <th>الاسم بالعربي</th>
-      <th>الاسم بالإنجليزي</th>
-      <th>القسم</th>
-      <th>الكمية</th>
-      <th>سعر التكلفة</th>
-      <th>سعر البيع</th>
-      <th>الوحدة</th>
-      <th>الباركود</th>
-      <th>الحد الأدنى</th>
-      <th>تاريخ الصلاحية</th>
-    </tr>`;
+  const exportToExcel = async () => {
+    try {
+      const { exportProductsToExcel } = await import('@/lib/excelUtils');
 
-    products.forEach((product) => {
-      const unit = units.find((u) => u.id === product.unitId);
-      const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
-      const priceTypeId = product.defaultPriceTypeId || defaultPriceType?.id;
-      const displayPrice =
-        priceTypeId && product.prices?.[priceTypeId]
-          ? product.prices[priceTypeId]
-          : product.price || 0;
+      // دالة للحصول على الوحدات المتعددة لمنتج معين
+      const getProductUnits = async (productId: string) => {
+        const allUnits = await db.getAll<any>('productUnits');
+        return allUnits.filter((u) => u.productId === productId);
+      };
 
-      htmlContent += `
-    <tr>
-      <td>${product.nameAr || ""}</td>
-      <td>${product.name || ""}</td>
-      <td>${product.category || ""}</td>
-      <td>${product.stock || 0}</td>
-      <td>${product.costPrice || 0}</td>
-      <td>${displayPrice}</td>
-      <td>${unit?.name || ""}</td>
-      <td>${product.barcode || ""}</td>
-      <td>${product.minStock || 0}</td>
-      <td>${product.expiryDate || ""}</td>
-    </tr>`;
-    });
+      await exportProductsToExcel(products, units, priceTypes, getProductUnits);
 
-    htmlContent += `
-  </table>
-</body>
-</html>`;
-
-    const BOM = "\uFEFF";
-    const blob = new Blob([BOM + htmlContent], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;",
-    });
-
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    const filename = `المنتجات_${new Date().toISOString().split("T")[0]}.xlsx`;
-
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "✅ تم التصدير بنجاح",
-      description: `تم تصدير ${products.length} منتج`,
-    });
+      toast({
+        title: "✅ تم التصدير بنجاح",
+        description: `تم تصدير ${products.length} منتج مع وحداتهم المتعددة`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "خطأ في التصدير",
+        description: "حدث خطأ أثناء تصدير الملف",
+        variant: "destructive",
+      });
+    }
   };
 
   // استيراد المنتجات من Excel
-  const importFromExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const rows = text.split("\n").filter((row) => row.trim());
+    try {
+      const { importProductsFromExcel } = await import('@/lib/excelUtils');
+      const { data, errors, updates, inserts, productUnitsData } = await importProductsFromExcel(file);
 
-        if (rows.length < 2) {
-          toast({
-            title: "خطأ",
-            description: "الملف فارغ أو غير صحيح",
-            variant: "destructive",
-          });
-          return;
-        }
+      if (errors.length > 0) {
+        console.warn('Import errors:', errors);
+      }
 
-        // Skip header row
-        const dataRows = rows.slice(1);
-        let importedCount = 0;
+      let updatedCount = 0;
+      let insertedCount = 0;
+      let unitsProcessed = 0;
+      const defaultUnit = units.find((u) => u.isDefault);
+      const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
 
-        for (const row of dataRows) {
-          const cols = row.split("\t");
-          if (cols.length < 4) continue;
+      for (const rowData of data) {
+        try {
+          if (rowData.isUpdate && rowData.id) {
+            // تحديث منتج موجود
+            const existingProduct = await db.get<Product>('products', rowData.id);
 
-          const defaultUnit = units.find((u) => u.isDefault);
-          const defaultPriceType = priceTypes.find((pt) => pt.isDefault);
+            if (existingProduct) {
+              const updatedProduct: Product = {
+                ...existingProduct,
+                nameAr: rowData.nameAr,
+                name: rowData.name,
+                category: rowData.category,
+                stock: rowData.stock,
+                costPrice: rowData.costPrice,
+                price: rowData.price,
+                prices: defaultPriceType
+                  ? { ...existingProduct.prices, [defaultPriceType.id]: rowData.price }
+                  : existingProduct.prices,
+                unitId: rowData.unitId || existingProduct.unitId,
+                barcode: rowData.barcode,
+                minStock: rowData.minStock,
+                expiryDate: rowData.expiryDate,
+              };
 
-          const product: Product = {
-            id: Date.now().toString() + Math.random(),
-            nameAr: cols[0]?.trim() || "",
-            name: cols[1]?.trim() || "",
-            category: cols[2]?.trim() || "",
-            stock: parseInt(cols[3]) || 0,
-            costPrice: parseFloat(cols[4]) || 0,
-            price: parseFloat(cols[5]) || 0,
-            prices: defaultPriceType
-              ? { [defaultPriceType.id]: parseFloat(cols[5]) || 0 }
-              : {},
-            unitId: defaultUnit?.id || "",
-            barcode: cols[7]?.trim() || "",
-            minStock: parseInt(cols[8]) || 10,
-            expiryDate: cols[9]?.trim() || "",
-          };
+              // معالجة الوحدات المتعددة
+              const hasUnitsInExcel = productUnitsData.has(rowData.id);
 
-          if (product.nameAr) {
-            await createWithAudit("products", product, {
-              userId: user?.id || "",
-              userName: user?.username || "",
+              //  حذف كل الوحدات القديمة أولاً
+              const allProductUnits = await db.getAll<any>('productUnits');
+              const existingUnits = allProductUnits.filter(
+                (pu) => pu.productId === rowData.id
+              );
+
+              for (const unit of existingUnits) {
+                await db.delete('productUnits', unit.id);
+              }
+
+              // إضافة الوحدات الجديدة من Excel
+              if (hasUnitsInExcel) {
+                const unitsToInsert = productUnitsData.get(rowData.id)!;
+                for (const unitData of unitsToInsert) {
+                  const newUnit: any = {
+                    id: `${rowData.id}_${unitData.unitId}_${Date.now()}`,
+                    productId: rowData.id,
+                    unitId: unitData.unitId,
+                    unitName: unitData.unitName,
+                    conversionFactor: unitData.conversionFactor,
+                    prices: defaultPriceType
+                      ? { [defaultPriceType.id]: unitData.price }
+                      : {},
+                    costPrice: unitData.costPrice,
+                    barcode: unitData.barcode,
+                    isBaseUnit: unitData.conversionFactor === 1,
+                    createdAt: new Date().toISOString(),
+                  };
+                  await db.add('productUnits', newUnit);
+                  unitsProcessed++;
+                }
+              }
+
+              // تحديث الـ flag بناءً على الوحدات الجديدة
+              updatedProduct.hasMultipleUnits = hasUnitsInExcel;
+
+              await updateWithAudit('products', rowData.id, updatedProduct, {
+                userId: user?.id || '',
+                userName: user?.username || '',
+                shiftId: currentShift?.id,
+              });
+              updatedCount++;
+            }
+          } else {
+            // إضافة منتج جديد
+            const newProductId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const product: Product = {
+              id: newProductId,
+              nameAr: rowData.nameAr,
+              name: rowData.name,
+              category: rowData.category,
+              stock: rowData.stock,
+              costPrice: rowData.costPrice,
+              price: rowData.price,
+              prices: defaultPriceType
+                ? { [defaultPriceType.id]: rowData.price }
+                : {},
+              unitId: rowData.unitId || defaultUnit?.id || '',
+              barcode: rowData.barcode,
+              minStock: rowData.minStock,
+              expiryDate: rowData.expiryDate,
+              hasMultipleUnits: productUnitsData.has(''),  // للمنتجات الجديدة نفحص لو فيه وحدات
+            };
+
+            await createWithAudit('products', product, {
+              userId: user?.id || '',
+              userName: user?.username || '',
               shiftId: currentShift?.id,
             });
-            importedCount++;
+            insertedCount++;
           }
+        } catch (error) {
+          console.error('Error processing product:', error);
         }
-
-        loadData();
-        toast({
-          title: "✅ تم الاستيراد بنجاح",
-          description: `تم استيراد ${importedCount} منتج`,
-        });
-      } catch (error) {
-        toast({
-          title: "خطأ",
-          description: "حدث خطأ أثناء الاستيراد",
-          variant: "destructive",
-        });
       }
-    };
-    reader.readAsText(file);
+
+      await loadData();
+
+      toast({
+        title: '✅ تم الاستيراد',
+        description: `تحديث: ${updatedCount} | إضافة: ${insertedCount} | وحدات: ${unitsProcessed} | أخطاء: ${errors.length}`,
+      });
+    } catch (error) {
+      console.error('Import error:', error);
+      toast({
+        title: 'خطأ في الاستيراد',
+        description: error instanceof Error ? error.message : 'حدث خطأ أثناء الاستيراد',
+        variant: 'destructive',
+      });
+    }
+
+    // إعادة تعيين input
+    e.target.value = '';
   };
 
   // حساب جرد المخزون

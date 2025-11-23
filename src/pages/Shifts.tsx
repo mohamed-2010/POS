@@ -129,23 +129,34 @@ const Shifts = () => {
       return;
     }
 
-    const expectedCash =
-      currentShift.startingCash +
-      currentShift.sales.cashSales -
-      currentShift.expenses;
-    const difference = actualCash - expectedCash;
-
-    const updatedShift: Shift = {
-      ...currentShift,
-      endTime: new Date().toISOString(),
-      expectedCash,
-      actualCash: actualCash,
-      difference,
-      status: "closed",
-      closedBy: user?.name || user?.username || "غير معروف",
-    };
-
     try {
+      // استخدام الدالة الموحدة من calculationService
+      const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
+
+      const sales = await calculateShiftSales(currentShift.id);
+      const cashSummary = await calculateExpectedCash(currentShift.id);
+
+      const difference = actualCash - cashSummary.expectedCash;
+
+      const updatedShift: Shift = {
+        ...currentShift,
+        endTime: new Date().toISOString(),
+        expectedCash: cashSummary.expectedCash,
+        actualCash: actualCash,
+        difference,
+        status: "closed",
+        closedBy: user?.name || user?.username || "غير معروف",
+        sales: {
+          totalInvoices: sales.totalInvoices,
+          totalAmount: sales.totalSales,
+          cashSales: sales.cashSales,
+          cardSales: sales.cardSales,
+          walletSales: sales.walletSales,
+          returns: sales.returns,
+        },
+        expenses: cashSummary.expenses,
+      };
+
       await db.update("shifts", updatedShift);
       setCurrentShift(null);
       setIsZReportOpen(false);
@@ -157,8 +168,7 @@ const Shifts = () => {
 
       if (difference !== 0) {
         toast.warning(
-          `تم إغلاق الوردية. فرق: ${Math.abs(difference).toFixed(2)} ${
-            difference > 0 ? "زيادة" : "نقص"
+          `تم إغلاق الوردية. فرق: ${Math.abs(difference).toFixed(2)} ${difference > 0 ? "زيادة" : "نقص"
           }`
         );
       } else {
@@ -200,19 +210,19 @@ const Shifts = () => {
           </div>
           {!currentShift
             ? can("shifts", "open") && (
-                <Button onClick={() => setIsStartDialogOpen(true)} size="lg">
-                  بدء وردية جديدة
-                </Button>
-              )
+              <Button onClick={() => setIsStartDialogOpen(true)} size="lg">
+                بدء وردية جديدة
+              </Button>
+            )
             : can("shifts", "close") && (
-                <Button
-                  onClick={() => setIsZReportOpen(true)}
-                  variant="destructive"
-                  size="lg"
-                >
-                  إغلاق الوردية
-                </Button>
-              )}
+              <Button
+                onClick={() => setIsZReportOpen(true)}
+                variant="destructive"
+                size="lg"
+              >
+                إغلاق الوردية
+              </Button>
+            )}
         </div>
 
         {/* الوردية الحالية */}
@@ -303,9 +313,8 @@ const Shifts = () => {
             {shifts.map((shift) => (
               <Card
                 key={shift.id}
-                className={`p-4 ${
-                  shift.status === "active" ? "border-primary bg-primary/5" : ""
-                }`}
+                className={`p-4 ${shift.status === "active" ? "border-primary bg-primary/5" : ""
+                  }`}
               >
                 <div className="grid md:grid-cols-5 gap-4">
                   <div>
@@ -344,11 +353,10 @@ const Shifts = () => {
                         {shift.difference !== undefined &&
                           shift.difference !== 0 && (
                             <span
-                              className={`text-xs font-bold ${
-                                shift.difference > 0
+                              className={`text-xs font-bold ${shift.difference > 0
                                   ? "text-green-600"
                                   : "text-red-600"
-                              }`}
+                                }`}
                             >
                               {shift.difference > 0 ? "+" : ""}
                               {formatCurrency(shift.difference)}
@@ -377,13 +385,12 @@ const Shifts = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">الفرق</p>
                         <p
-                          className={`font-bold ${
-                            (shift.difference || 0) > 0
+                          className={`font-bold ${(shift.difference || 0) > 0
                               ? "text-green-600"
                               : (shift.difference || 0) < 0
-                              ? "text-red-600"
-                              : "text-gray-600"
-                          }`}
+                                ? "text-red-600"
+                                : "text-gray-600"
+                            }`}
                         >
                           {formatCurrency(shift.difference || 0)}
                         </p>

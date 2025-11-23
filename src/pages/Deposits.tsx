@@ -116,9 +116,18 @@ const Deposits = () => {
         return;
       }
 
-      // Get current shift
+      // Get current active shift - CRITICAL: must exist!
       const shifts = await db.getAll<any>("shifts");
-      const currentShift = shifts.find((s) => !s.closedAt);
+      const currentShift = shifts.find((s) => s.status === "active");
+
+      if (!currentShift) {
+        toast({
+          title: "يجب فتح وردية أولاً",
+          description: "لا يمكن إضافة إيداع بدون وردية مفتوحة",
+          variant: "destructive"
+        });
+        return;
+      }
 
       const newDeposit: Deposit = {
         id: Date.now().toString(),
@@ -127,7 +136,7 @@ const Deposits = () => {
         sourceName: source.name,
         userId: user?.id || "",
         userName: user?.username || "",
-        shiftId: currentShift?.id || "",
+        shiftId: currentShift.id,
         notes: formData.notes.trim(),
         createdAt: new Date().toISOString(),
       };
