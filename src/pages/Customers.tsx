@@ -44,6 +44,7 @@ const Customers = () => {
     address: "",
     nationalId: "",
     creditLimit: 0,
+    initialCreditBalance: 0,
     notes: "",
   });
 
@@ -92,7 +93,46 @@ const Customers = () => {
           createdAt: new Date().toISOString(),
         };
         await db.add("customers", newCustomer);
-        toast.success("تم إضافة العميل بنجاح");
+
+        // إنشاء فاتورة آجلة للرصيد الافتتاحي إذا كان المبلغ أكبر من صفر
+        if (formData.initialCreditBalance > 0) {
+          const initialCreditAmount =
+            parseFloat(formData.initialCreditBalance.toString()) || 0;
+
+          const creditInvoice = {
+            id: `INIT-${Date.now()}`,
+            customerId: newCustomer.id,
+            customerName: newCustomer.name,
+            items: [],
+            subtotal: initialCreditAmount,
+            discount: 0,
+            tax: 0,
+            total: initialCreditAmount,
+            paymentType: "credit" as const,
+            paymentStatus: "unpaid" as const,
+            paidAmount: 0,
+            remainingAmount: initialCreditAmount,
+            paymentMethodIds: [],
+            paymentMethodAmounts: {},
+            userId: "system",
+            userName: "النظام",
+            createdAt: new Date().toISOString(),
+            dueDate: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+            shiftId: undefined,
+          };
+
+          await db.add("invoices", creditInvoice);
+
+          // تحديث رصيد العميل
+          newCustomer.currentBalance = initialCreditAmount;
+          await db.update("customers", newCustomer);
+
+          toast.success("تم إضافة العميل وإنشاء فاتورة الرصيد الافتتاحي");
+        } else {
+          toast.success("تم إضافة العميل بنجاح");
+        }
       }
 
       setIsDialogOpen(false);
@@ -111,6 +151,7 @@ const Customers = () => {
       address: customer.address,
       nationalId: customer.nationalId || "",
       creditLimit: customer.creditLimit,
+      initialCreditBalance: 0,
       notes: customer.notes || "",
     });
     setIsDialogOpen(true);
@@ -135,6 +176,7 @@ const Customers = () => {
       address: "",
       nationalId: "",
       creditLimit: 0,
+      initialCreditBalance: 0,
       notes: "",
     });
     setEditingCustomer(null);
@@ -301,6 +343,31 @@ const Customers = () => {
                     />
                   </div>
                 </div>
+                {!editingCustomer && (
+                  <div className="space-y-2">
+                    <Label htmlFor="initialCreditBalance">
+                      الرصيد الافتتاحي للأجل ({currency})
+                    </Label>
+                    <Input
+                      id="initialCreditBalance"
+                      type="number"
+                      value={formData.initialCreditBalance}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          initialCreditBalance: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      سيتم إنشاء فاتورة آجلة تلقائياً بهذا المبلغ عند إضافة
+                      العميل
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="address">العنوان</Label>
                   <Input

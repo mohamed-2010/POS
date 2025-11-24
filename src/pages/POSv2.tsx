@@ -155,6 +155,7 @@ const POSv2 = () => {
     name: "",
     phone: "",
     address: "",
+    initialCreditBalance: 0,
   });
 
   // Print Invoice
@@ -519,9 +520,9 @@ const POSv2 = () => {
   // حساب المدفوع من الدفع المقسم أو المدفوع العادي
   const paid = splitPaymentMode
     ? paymentSplits.reduce(
-      (sum, split) => sum + (parseFloat(split.amount) || 0),
-      0
-    )
+        (sum, split) => sum + (parseFloat(split.amount) || 0),
+        0
+      )
     : parseFloat(paidAmount) || 0;
   const change = paid - total;
 
@@ -590,10 +591,11 @@ const POSv2 = () => {
 
     toast({
       title: "تم تطبيق العرض",
-      description: `${promotion.name} - ${promotion.discountType === "percentage"
-        ? `${promotion.discountValue}%`
-        : `${promotion.discountValue} جنيه`
-        }`,
+      description: `${promotion.name} - ${
+        promotion.discountType === "percentage"
+          ? `${promotion.discountValue}%`
+          : `${promotion.discountValue} جنيه`
+      }`,
     });
   };
 
@@ -648,11 +650,54 @@ const POSv2 = () => {
     };
 
     await db.add("customers", customer);
+
+    // إنشاء فاتورة آجلة للرصيد الافتتاحي إذا كان المبلغ أكبر من صفر
+    if (newCustomerData.initialCreditBalance > 0) {
+      const initialCreditAmount =
+        parseFloat(newCustomerData.initialCreditBalance.toString()) || 0;
+
+      const creditInvoice = {
+        id: `INIT-${Date.now()}`,
+        customerId: customer.id,
+        customerName: customer.name,
+        items: [],
+        subtotal: initialCreditAmount,
+        discount: 0,
+        tax: 0,
+        total: initialCreditAmount,
+        paymentType: "credit" as const,
+        paymentStatus: "unpaid" as const,
+        paidAmount: 0,
+        remainingAmount: initialCreditAmount,
+        paymentMethodIds: [],
+        paymentMethodAmounts: {},
+        userId: user?.id || "system",
+        userName: user?.name || "النظام",
+        createdAt: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        shiftId: contextShift?.id,
+      };
+
+      await db.add("invoices", creditInvoice);
+
+      // تحديث رصيد العميل
+      customer.currentBalance = initialCreditAmount;
+      await db.update("customers", customer);
+
+      toast({ title: "تم إضافة العميل وإنشاء فاتورة الرصيد الافتتاحي" });
+    } else {
+      toast({ title: "تم إضافة العميل" });
+    }
+
     await loadData();
     setSelectedCustomer(customer.id);
     setAddCustomerDialog(false);
-    setNewCustomerData({ name: "", phone: "", address: "" });
-    toast({ title: "تم إضافة العميل" });
+    setNewCustomerData({
+      name: "",
+      phone: "",
+      address: "",
+      initialCreditBalance: 0,
+    });
   };
 
   // Save invoice
@@ -680,11 +725,11 @@ const POSv2 = () => {
       const lastInvoiceNumber =
         allInvoices.length > 0
           ? Math.max(
-            ...allInvoices.map((inv) => {
-              const num = parseInt(inv.id);
-              return isNaN(num) ? 0 : num;
-            })
-          )
+              ...allInvoices.map((inv) => {
+                const num = parseInt(inv.id);
+                return isNaN(num) ? 0 : num;
+              })
+            )
           : 0;
       const newInvoiceNumber = (lastInvoiceNumber + 1).toString();
 
@@ -755,14 +800,14 @@ const POSv2 = () => {
         installmentPlan:
           paymentType === "installment"
             ? {
-              numberOfInstallments: parseInt(installmentMonths),
-              installmentAmount:
-                (total - parseFloat(downPayment || "0")) /
-                parseInt(installmentMonths),
-              interestRate: 0,
-              startDate: new Date().toISOString(),
-              payments: [],
-            }
+                numberOfInstallments: parseInt(installmentMonths),
+                installmentAmount:
+                  (total - parseFloat(downPayment || "0")) /
+                  parseInt(installmentMonths),
+                interestRate: 0,
+                startDate: new Date().toISOString(),
+                payments: [],
+              }
             : undefined,
       };
 
@@ -936,7 +981,8 @@ const POSv2 = () => {
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 // إخفاء الصورة إذا فشل التحميل
-                                (e.target as HTMLElement).style.display = 'none';
+                                (e.target as HTMLElement).style.display =
+                                  "none";
                               }}
                             />
                           </div>
@@ -1061,8 +1107,9 @@ const POSv2 = () => {
                         <tbody>
                           {cartItems.map((item, index) => (
                             <tr
-                              key={`${item.id}-${item.productUnitId || "base"
-                                }-${index}`}
+                              key={`${item.id}-${
+                                item.productUnitId || "base"
+                              }-${index}`}
                               className="border-b"
                             >
                               <td className="p-2">
@@ -1137,8 +1184,9 @@ const POSv2 = () => {
                               </td>
                               <td className="p-2">
                                 <Input
-                                  key={`${item.id}-${item.priceTypeId || "default"
-                                    }-${item.productUnitId || "base"}`}
+                                  key={`${item.id}-${
+                                    item.priceTypeId || "default"
+                                  }-${item.productUnitId || "base"}`}
                                   type="number"
                                   step="0.01"
                                   value={
@@ -1678,10 +1726,11 @@ const POSv2 = () => {
 
                         {paid > 0 && (
                           <div
-                            className={`text-center p-3 rounded ${change >= 0
-                              ? "bg-green-100 text-green-900"
-                              : "bg-red-100 text-red-900"
-                              }`}
+                            className={`text-center p-3 rounded ${
+                              change >= 0
+                                ? "bg-green-100 text-green-900"
+                                : "bg-red-100 text-red-900"
+                            }`}
                           >
                             <div className="text-xs">
                               {change >= 0 ? "الباقي" : "المتبقي"}
@@ -1708,15 +1757,11 @@ const POSv2 = () => {
                           <Button
                             variant="secondary"
                             onClick={() => saveInvoice(false)}
-                            disabled={cartItems.length === 0 || paid < total}
                           >
                             <Save className="h-4 w-4 ml-2" />
                             حفظ
                           </Button>
-                          <Button
-                            onClick={() => saveInvoice(true)}
-                            disabled={cartItems.length === 0 || paid < total}
-                          >
+                          <Button onClick={() => saveInvoice(true)}>
                             <Printer className="h-4 w-4 ml-2" />
                             حفظ وطباعة
                           </Button>
@@ -1774,13 +1819,37 @@ const POSv2 = () => {
                 }
               />
             </div>
+            <div>
+              <Label>الرصيد الافتتاحي للأجل ({currency})</Label>
+              <Input
+                type="number"
+                value={newCustomerData.initialCreditBalance}
+                onChange={(e) =>
+                  setNewCustomerData({
+                    ...newCustomerData,
+                    initialCreditBalance: parseFloat(e.target.value) || 0,
+                  })
+                }
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                سيتم إنشاء فاتورة آجلة تلقائياً بهذا المبلغ
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setAddCustomerDialog(false);
-                setNewCustomerData({ name: "", phone: "", address: "" });
+                setNewCustomerData({
+                  name: "",
+                  phone: "",
+                  address: "",
+                  initialCreditBalance: 0,
+                });
               }}
             >
               إلغاء
@@ -1892,10 +1961,11 @@ const POSv2 = () => {
               promotions.map((promo) => (
                 <Card
                   key={promo.id}
-                  className={`p-4 cursor-pointer hover:border-green-500 transition-all ${selectedPromotion === promo.id
-                    ? "border-green-500 bg-green-50"
-                    : ""
-                    }`}
+                  className={`p-4 cursor-pointer hover:border-green-500 transition-all ${
+                    selectedPromotion === promo.id
+                      ? "border-green-500 bg-green-50"
+                      : ""
+                  }`}
                   onClick={() => applyPromotion(promo.id)}
                 >
                   <div className="flex items-start justify-between gap-3">

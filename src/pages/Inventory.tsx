@@ -386,11 +386,43 @@ const Inventory = () => {
   // تصدير المنتجات إلى Excel
   const exportToExcel = async () => {
     try {
-      const { exportProductsToExcel } = await import('@/lib/excelUtils');
+      const { exportProductsToExcel } = await import("@/lib/excelUtils");
 
       // دالة للحصول على الوحدات المتعددة لمنتج معين
       const getProductUnits = async (productId: string) => {
-        const allUnits = await db.getAll<any>('productUnits');
+        const allUnits = await db.getAll<any>("productUnits");
+        return allUnits.filter((u) => u.productId === productId);
+      };
+
+      await exportProductsToExcel(
+        products.filter((p) => p.stock == 0),
+        units,
+        priceTypes,
+        getProductUnits
+      );
+
+      toast({
+        title: "✅ تم التصدير بنجاح",
+        description: `تم تصدير ${products.length} منتج مع وحداتهم المتعددة`,
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "خطأ في التصدير",
+        description: "حدث خطأ أثناء تصدير الملف",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // تصدير المنتجات إلى Excel
+  const exportAllToExcel = async () => {
+    try {
+      const { exportProductsToExcel } = await import("@/lib/excelUtils");
+
+      // دالة للحصول على الوحدات المتعددة لمنتج معين
+      const getProductUnits = async (productId: string) => {
+        const allUnits = await db.getAll<any>("productUnits");
         return allUnits.filter((u) => u.productId === productId);
       };
 
@@ -401,7 +433,7 @@ const Inventory = () => {
         description: `تم تصدير ${products.length} منتج مع وحداتهم المتعددة`,
       });
     } catch (error) {
-      console.error('Export error:', error);
+      console.error("Export error:", error);
       toast({
         title: "خطأ في التصدير",
         description: "حدث خطأ أثناء تصدير الملف",
@@ -416,11 +448,12 @@ const Inventory = () => {
     if (!file) return;
 
     try {
-      const { importProductsFromExcel } = await import('@/lib/excelUtils');
-      const { data, errors, updates, inserts, productUnitsData } = await importProductsFromExcel(file);
+      const { importProductsFromExcel } = await import("@/lib/excelUtils");
+      const { data, errors, updates, inserts, productUnitsData } =
+        await importProductsFromExcel(file);
 
       if (errors.length > 0) {
-        console.warn('Import errors:', errors);
+        console.warn("Import errors:", errors);
       }
 
       let updatedCount = 0;
@@ -433,7 +466,10 @@ const Inventory = () => {
         try {
           if (rowData.isUpdate && rowData.id) {
             // تحديث منتج موجود
-            const existingProduct = await db.get<Product>('products', rowData.id);
+            const existingProduct = await db.get<Product>(
+              "products",
+              rowData.id
+            );
 
             if (existingProduct) {
               const updatedProduct: Product = {
@@ -445,7 +481,10 @@ const Inventory = () => {
                 costPrice: rowData.costPrice,
                 price: rowData.price,
                 prices: defaultPriceType
-                  ? { ...existingProduct.prices, [defaultPriceType.id]: rowData.price }
+                  ? {
+                      ...existingProduct.prices,
+                      [defaultPriceType.id]: rowData.price,
+                    }
                   : existingProduct.prices,
                 unitId: rowData.unitId || existingProduct.unitId,
                 barcode: rowData.barcode,
@@ -457,13 +496,13 @@ const Inventory = () => {
               const hasUnitsInExcel = productUnitsData.has(rowData.id);
 
               //  حذف كل الوحدات القديمة أولاً
-              const allProductUnits = await db.getAll<any>('productUnits');
+              const allProductUnits = await db.getAll<any>("productUnits");
               const existingUnits = allProductUnits.filter(
                 (pu) => pu.productId === rowData.id
               );
 
               for (const unit of existingUnits) {
-                await db.delete('productUnits', unit.id);
+                await db.delete("productUnits", unit.id);
               }
 
               // إضافة الوحدات الجديدة من Excel
@@ -484,7 +523,7 @@ const Inventory = () => {
                     isBaseUnit: unitData.conversionFactor === 1,
                     createdAt: new Date().toISOString(),
                   };
-                  await db.add('productUnits', newUnit);
+                  await db.add("productUnits", newUnit);
                   unitsProcessed++;
                 }
               }
@@ -492,16 +531,18 @@ const Inventory = () => {
               // تحديث الـ flag بناءً على الوحدات الجديدة
               updatedProduct.hasMultipleUnits = hasUnitsInExcel;
 
-              await updateWithAudit('products', rowData.id, updatedProduct, {
-                userId: user?.id || '',
-                userName: user?.username || '',
+              await updateWithAudit("products", rowData.id, updatedProduct, {
+                userId: user?.id || "",
+                userName: user?.username || "",
                 shiftId: currentShift?.id,
               });
               updatedCount++;
             }
           } else {
             // إضافة منتج جديد
-            const newProductId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const newProductId = `${Date.now()}_${Math.random()
+              .toString(36)
+              .substr(2, 9)}`;
             const product: Product = {
               id: newProductId,
               nameAr: rowData.nameAr,
@@ -513,42 +554,43 @@ const Inventory = () => {
               prices: defaultPriceType
                 ? { [defaultPriceType.id]: rowData.price }
                 : {},
-              unitId: rowData.unitId || defaultUnit?.id || '',
+              unitId: rowData.unitId || defaultUnit?.id || "",
               barcode: rowData.barcode,
               minStock: rowData.minStock,
               expiryDate: rowData.expiryDate,
-              hasMultipleUnits: productUnitsData.has(''),  // للمنتجات الجديدة نفحص لو فيه وحدات
+              hasMultipleUnits: productUnitsData.has(""), // للمنتجات الجديدة نفحص لو فيه وحدات
             };
 
-            await createWithAudit('products', product, {
-              userId: user?.id || '',
-              userName: user?.username || '',
+            await createWithAudit("products", product, {
+              userId: user?.id || "",
+              userName: user?.username || "",
               shiftId: currentShift?.id,
             });
             insertedCount++;
           }
         } catch (error) {
-          console.error('Error processing product:', error);
+          console.error("Error processing product:", error);
         }
       }
 
       await loadData();
 
       toast({
-        title: '✅ تم الاستيراد',
+        title: "✅ تم الاستيراد",
         description: `تحديث: ${updatedCount} | إضافة: ${insertedCount} | وحدات: ${unitsProcessed} | أخطاء: ${errors.length}`,
       });
     } catch (error) {
-      console.error('Import error:', error);
+      console.error("Import error:", error);
       toast({
-        title: 'خطأ في الاستيراد',
-        description: error instanceof Error ? error.message : 'حدث خطأ أثناء الاستيراد',
-        variant: 'destructive',
+        title: "خطأ في الاستيراد",
+        description:
+          error instanceof Error ? error.message : "حدث خطأ أثناء الاستيراد",
+        variant: "destructive",
       });
     }
 
     // إعادة تعيين input
-    e.target.value = '';
+    e.target.value = "";
   };
 
   // حساب جرد المخزون
@@ -1253,13 +1295,18 @@ const Inventory = () => {
             <DialogFooter>
               <Button
                 variant="outline"
+                className="ml-2"
                 onClick={() => setInventoryDialogOpen(false)}
               >
                 إغلاق
               </Button>
               <Button onClick={exportToExcel}>
                 <Download className="h-4 w-4 ml-2" />
-                تصدير التقرير
+                تصدير المنتجات المنتهيه
+              </Button>
+              <Button onClick={exportAllToExcel}>
+                <Download className="h-4 w-4 ml-2" />
+                تصدير كل المنتجات
               </Button>
             </DialogFooter>
           </DialogContent>

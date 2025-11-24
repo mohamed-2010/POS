@@ -43,7 +43,8 @@ const Settings = () => {
     loading,
   } = useSettings();
   const [formData, setFormData] = useState<{ [key: string]: string }>({});
-  const { mode, colorScheme, setMode, setColorScheme, toggleMode } = useThemeContext();
+  const { mode, colorScheme, setMode, setColorScheme, toggleMode } =
+    useThemeContext();
 
   useEffect(() => {
     // تحميل جميع الإعدادات في formData
@@ -178,7 +179,10 @@ const Settings = () => {
     if (!confirmed) return;
 
     try {
-      toast({ title: "جاري استيراد البيانات...", description: "يرجى الانتظار" });
+      toast({
+        title: "جاري استيراد البيانات...",
+        description: "يرجى الانتظار",
+      });
 
       const text = await file.text();
       const data = JSON.parse(text);
@@ -213,11 +217,8 @@ const Settings = () => {
 
       for (const storeName of stores) {
         if (data[storeName] && Array.isArray(data[storeName])) {
-          // Clear existing data
-          const allItems = await db.getAll(storeName);
-          for (const item of allItems) {
-            await db.delete(storeName, (item as any).id);
-          }
+          // Clear existing data using clear() method
+          await db.clear(storeName);
 
           // Add imported data
           for (const item of data[storeName]) {
@@ -273,10 +274,7 @@ const Settings = () => {
       let deletedCount = 0;
 
       for (const shift of allShifts) {
-        if (
-          shift.closedAt &&
-          new Date(shift.closedAt) < cutoffDate
-        ) {
+        if (shift.closedAt && new Date(shift.closedAt) < cutoffDate) {
           await db.delete("shifts", shift.id);
           deletedCount++;
         }
@@ -308,8 +306,8 @@ const Settings = () => {
 
     const confirmed = window.confirm(
       "⚠️ تحذير: سيتم حذف قاعدة البيانات القديمة وإنشاء واحدة جديدة!\n\n" +
-      "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
-      "هل أنت متأكد؟"
+        "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
+        "هل أنت متأكد؟"
     );
 
     if (!confirmed) return;
@@ -452,7 +450,10 @@ const Settings = () => {
                   <Label className="text-base font-semibold mb-3 block">
                     🎨 اختر نظام الألوان المفضل
                   </Label>
-                  <Select value={colorScheme} onValueChange={(value: any) => setColorScheme(value)}>
+                  <Select
+                    value={colorScheme}
+                    onValueChange={(value: any) => setColorScheme(value)}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -478,23 +479,41 @@ const Settings = () => {
                   </Label>
                   <div className="grid grid-cols-2 gap-4">
                     <Card
-                      className={`p- 4 cursor - pointer transition - all border - 2 ${mode === 'light' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                        }`}
-                      onClick={() => setMode('light')}
+                      className={`p- 4 cursor - pointer transition - all border - 2 ${
+                        mode === "light"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                      onClick={() => setMode("light")}
                     >
                       <div className="flex flex-col items-center gap-2">
-                        <Sun className={`h - 8 w - 8 ${mode === 'light' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <Sun
+                          className={`h - 8 w - 8 ${
+                            mode === "light"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          } `}
+                        />
                         <span className="font-semibold">الوضع النهاري</span>
                       </div>
                     </Card>
 
                     <Card
-                      className={`p - 4 cursor - pointer transition - all border - 2 ${mode === 'dark' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                        } `}
-                      onClick={() => setMode('dark')}
+                      className={`p - 4 cursor - pointer transition - all border - 2 ${
+                        mode === "dark"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      } `}
+                      onClick={() => setMode("dark")}
                     >
                       <div className="flex flex-col items-center gap-2">
-                        <Moon className={`h - 8 w - 8 ${mode === 'dark' ? 'text-primary' : 'text-muted-foreground'} `} />
+                        <Moon
+                          className={`h - 8 w - 8 ${
+                            mode === "dark"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          } `}
+                        />
                         <span className="font-semibold">الوضع الليلي</span>
                       </div>
                     </Card>
@@ -528,14 +547,13 @@ const Settings = () => {
                 <div className="bg-muted p-4 rounded-lg">
                   <h3 className="font-semibold mb-2">ℹ️ ملاحظة</h3>
                   <p className="text-sm text-muted-foreground">
-                    التغييرات تُطبق فوراً وتُحفظ تلقائياً! جميع الألوان في التطبيق ستتغير حسب اختيارك.
+                    التغييرات تُطبق فوراً وتُحفظ تلقائياً! جميع الألوان في
+                    التطبيق ستتغير حسب اختيارك.
                   </p>
                 </div>
               </div>
             </Card>
           </TabsContent>
-
-
 
           <TabsContent value="store">
             <Card className="p-6">
@@ -611,10 +629,13 @@ const Settings = () => {
               <Card className="p-6 border-green-200 dark:border-green-800">
                 <div className="flex items-center gap-2 mb-4">
                   <Download className="h-6 w-6 text-green-600 dark:text-green-400" />
-                  <h2 className="text-xl font-bold">📤 تصدير البيانات (Backup)</h2>
+                  <h2 className="text-xl font-bold">
+                    📤 تصدير البيانات (Backup)
+                  </h2>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  احفظ نسخة احتياطية كاملة من جميع بيانات النظام (منتجات، فواتير، ورديات، عملاء، إلخ...)
+                  احفظ نسخة احتياطية كاملة من جميع بيانات النظام (منتجات،
+                  فواتير، ورديات، عملاء، إلخ...)
                 </p>
                 <Button onClick={handleExportData} className="gap-2">
                   <FileJson className="h-4 w-4" />
@@ -626,19 +647,24 @@ const Settings = () => {
               <Card className="p-6 border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-4">
                   <Upload className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                  <h2 className="text-xl font-bold">📥 استيراد البيانات (Restore)</h2>
+                  <h2 className="text-xl font-bold">
+                    📥 استيراد البيانات (Restore)
+                  </h2>
                 </div>
                 <div className="space-y-4">
                   <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                     <p className="text-sm text-blue-900 dark:text-blue-100 mb-2">
-                      <strong>⚠️ تحذير:</strong> سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة!
+                      <strong>⚠️ تحذير:</strong> سيتم استبدال جميع البيانات
+                      الحالية بالبيانات المستوردة!
                     </p>
                     <p className="text-sm text-blue-800 dark:text-blue-200">
                       تأكد من أن ملف النسخة الاحتياطية صحيح قبل الاستيراد.
                     </p>
                   </div>
                   <div>
-                    <Label htmlFor="backup-file">اختر ملف النسخة الاحتياطية</Label>
+                    <Label htmlFor="backup-file">
+                      اختر ملف النسخة الاحتياطية
+                    </Label>
                     <Input
                       id="backup-file"
                       type="file"
@@ -664,7 +690,9 @@ const Settings = () => {
                     حذف الورديات المغلقة قبل تاريخ معين لتوفير المساحة
                   </p>
                   <div>
-                    <Label htmlFor="delete-before-date">حذف الورديات المغلقة قبل:</Label>
+                    <Label htmlFor="delete-before-date">
+                      حذف الورديات المغلقة قبل:
+                    </Label>
                     <Input
                       id="delete-before-date"
                       type="date"
@@ -683,11 +711,15 @@ const Settings = () => {
               <Card className="p-6 border-amber-200 dark:border-amber-800">
                 <div className="flex items-center gap-2 mb-4">
                   <Database className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-                  <h2 className="text-xl font-bold">⚙️ إعادة تهيئة قاعدة البيانات</h2>
+                  <h2 className="text-xl font-bold">
+                    ⚙️ إعادة تهيئة قاعدة البيانات
+                  </h2>
                 </div>
                 <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                   <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                    <strong>استخدم هذا فقط</strong> إذا واجهت أخطاء في قاعدة البيانات. سيتم حذف كل البيانات وإعادة إنشاء قاعدة بيانات جديدة.
+                    <strong>استخدم هذا فقط</strong> إذا واجهت أخطاء في قاعدة
+                    البيانات. سيتم حذف كل البيانات وإعادة إنشاء قاعدة بيانات
+                    جديدة.
                   </p>
                   <Button
                     onClick={handleResetDatabase}
