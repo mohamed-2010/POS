@@ -77,7 +77,9 @@ export function ZReportDialog({
       console.log("[ZReportDialog] Shift loaded:", shiftData);
 
       // استخدام الدوال الموحدة من calculationService
-      const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
+      const { calculateShiftSales, calculateExpectedCash } = await import(
+        "@/lib/calculationService"
+      );
 
       const sales = await calculateShiftSales(shiftId);
       const cashSummary = await calculateExpectedCash(shiftId);
@@ -337,12 +339,13 @@ export function ZReportDialog({
                 <div className="flex justify-between text-xl">
                   <span className="font-bold">الفرق:</span>
                   <span
-                    className={`font-bold ${difference > 0
-                      ? "text-green-600"
-                      : difference < 0
+                    className={`font-bold ${
+                      difference > 0
+                        ? "text-green-600"
+                        : difference < 0
                         ? "text-red-600"
                         : ""
-                      }`}
+                    }`}
                   >
                     {difference > 0 ? "+" : ""}
                     {formatCurrency(difference)}
