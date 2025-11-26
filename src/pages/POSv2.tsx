@@ -19,6 +19,7 @@ import {
   Wallet,
   Tag,
   Percent,
+  FileText,
 } from "lucide-react";
 import {
   db,
@@ -164,6 +165,9 @@ const POSv2 = () => {
 
   const taxRate = parseFloat(getSetting("taxRate") || "14");
   const currency = getSetting("currency") || "EGP";
+  const storeName = getSetting("storeName") || "نظام نقاط البيع";
+  const storeAddress = getSetting("storeAddress") || "";
+  const storePhone = getSetting("storePhone") || "";
 
   useEffect(() => {
     loadData();
@@ -571,6 +575,276 @@ const POSv2 = () => {
 
   const removePaymentSplit = (index: number) => {
     setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
+  };
+
+  // Generate Quote PDF
+  const generateQuotePDF = () => {
+    if (cartItems.length === 0) {
+      toast({ title: "لا يوجد منتجات في السلة", variant: "destructive" });
+      return;
+    }
+
+    const quoteNumber = `QT-${Date.now()}`;
+    const currentDate = new Date().toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const customerName =
+      selectedCustomer === "cash"
+        ? "عميل نقدي"
+        : customers.find((c) => c.id === selectedCustomer)?.name || "عميل";
+
+    const quoteContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>عرض سعر - ${quoteNumber}</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+            background: #fff;
+            color: #333;
+            direction: rtl;
+          }
+          .quote-container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 2px solid #333;
+            padding: 30px;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+          }
+          .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+          }
+          .store-info {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.8;
+          }
+          .quote-title {
+            text-align: center;
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+          }
+          .quote-title h2 {
+            font-size: 24px;
+            color: #333;
+          }
+          .quote-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 8px;
+          }
+          .quote-info div {
+            text-align: center;
+          }
+          .quote-info label {
+            font-size: 12px;
+            color: #888;
+            display: block;
+          }
+          .quote-info span {
+            font-size: 14px;
+            font-weight: bold;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+          }
+          th, td {
+            border: 1px solid #ddd;
+            padding: 12px 10px;
+            text-align: center;
+          }
+          th {
+            background: #333;
+            color: #fff;
+            font-weight: bold;
+          }
+          tr:nth-child(even) {
+            background: #f9f9f9;
+          }
+          .totals {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+          }
+          .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+          }
+          .totals-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 18px;
+            padding-top: 15px;
+            color: #1a1a1a;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px dashed #ccc;
+          }
+          .footer p {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+          }
+          .validity {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+            border: 1px solid #ffc107;
+          }
+          .validity strong {
+            color: #856404;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+            .quote-container {
+              border: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="quote-container">
+          <div class="header">
+            <h1>${storeName || "المتجر"}</h1>
+            <div class="store-info">
+              ${storeAddress ? `<p>${storeAddress}</p>` : ""}
+              ${storePhone ? `<p>هاتف: ${storePhone}</p>` : ""}
+            </div>
+          </div>
+          
+          <div class="quote-title">
+            <h2>📋 عرض سعر</h2>
+          </div>
+          
+          <div class="quote-info">
+            <div>
+              <label>رقم العرض</label>
+              <span>${quoteNumber}</span>
+            </div>
+            <div>
+              <label>التاريخ</label>
+              <span>${currentDate}</span>
+            </div>
+            <div>
+              <label>العميل</label>
+              <span>${customerName}</span>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>المنتج</th>
+                <th>الكمية</th>
+                <th>السعر</th>
+                <th>الإجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${cartItems
+                .map(
+                  (item, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${item.name}</td>
+                  <td>${item.quantity}</td>
+                  <td>${item.price.toFixed(2)} ${currency}</td>
+                  <td>${(item.price * item.quantity).toFixed(
+                    2
+                  )} ${currency}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <div class="totals-row">
+              <span>المجموع الفرعي:</span>
+              <span>${subtotal.toFixed(2)} ${currency}</span>
+            </div>
+            ${
+              discount > 0
+                ? `
+            <div class="totals-row">
+              <span>الخصم:</span>
+              <span>- ${discount.toFixed(2)} ${currency}</span>
+            </div>
+            `
+                : ""
+            }
+            ${
+              tax > 0
+                ? `
+            <div class="totals-row">
+              <span>الضريبة (${taxRate}%):</span>
+              <span>${tax.toFixed(2)} ${currency}</span>
+            </div>
+            `
+                : ""
+            }
+            <div class="totals-row">
+              <span>الإجمالي النهائي:</span>
+              <span>${total.toFixed(2)} ${currency}</span>
+            </div>
+          </div>
+          <div class="footer">
+            <p>شكراً لاختياركم ${storeName || "متجرنا"}</p>
+            <p>الأسعار قابلة للتغيير - هذا العرض غير ملزم</p>
+          </div>
+        </div>
+        
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(quoteContent);
+      printWindow.document.close();
+    }
   };
 
   // Apply promotion
@@ -1753,7 +2027,7 @@ const POSv2 = () => {
                           </Button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           <Button
                             variant="secondary"
                             onClick={() => saveInvoice(false)}
@@ -1764,6 +2038,10 @@ const POSv2 = () => {
                           <Button onClick={() => saveInvoice(true)}>
                             <Printer className="h-4 w-4 ml-2" />
                             حفظ وطباعة
+                          </Button>
+                          <Button variant="outline" onClick={generateQuotePDF}>
+                            <FileText className="h-4 w-4 ml-2" />
+                            عرض سعر
                           </Button>
                         </div>
                       </div>

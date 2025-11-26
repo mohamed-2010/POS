@@ -1,6 +1,6 @@
 /**
  * Calculation Service - خدمة الحسابات الموحدة
- * 
+ *
  * يحتوي على جميع الحسابات المالية المستخدمة في التطبيق
  * لضمان الدقة والاتساق في:
  * - إغلاق الورديات
@@ -9,51 +9,54 @@
  * - حسابات النقدية المتوقعة
  */
 
-import { db } from './indexedDB';
+import { db } from "./indexedDB";
 
 // ==================== Types ====================
 
 export interface ShiftSalesCalculation {
-    totalSales: number;
-    totalInvoices: number;
-    cashSales: number;
-    cardSales: number;
-    walletSales: number;
-    returns: number;
-    paymentMethodBreakdown: Record<string, {
-        name: string;
-        amount: number;
-        type: string;
-    }>;
+  totalSales: number;
+  totalInvoices: number;
+  cashSales: number;
+  cardSales: number;
+  walletSales: number;
+  returns: number;
+  paymentMethodBreakdown: Record<
+    string,
+    {
+      name: string;
+      amount: number;
+      type: string;
+    }
+  >;
 }
 
 export interface ExpectedCashCalculation {
-    startingCash: number;
-    salesCash: number;
-    cashIn: number;
-    cashOut: number;
-    expenses: number;
-    returns: number;
-    expectedCash: number;
-    expensesList?: any[];
+  startingCash: number;
+  salesCash: number;
+  cashIn: number;
+  cashOut: number;
+  expenses: number;
+  returns: number;
+  expectedCash: number;
+  expensesList?: any[];
 }
 
 export interface DailySummaryCalculation {
-    date: string;
-    invoiceCount: number;
-    totalSales: number;
-    totalExpenses: number;
-    totalReturns: number;
-    netProfit: number;
-    paymentMethodSales: Record<string, { name: string; amount: number }>;
+  date: string;
+  invoiceCount: number;
+  totalSales: number;
+  totalExpenses: number;
+  totalReturns: number;
+  netProfit: number;
+  paymentMethodSales: Record<string, { name: string; amount: number }>;
 }
 
 export interface ReportTotals {
-    totalSales: number;
-    totalExpenses: number;
-    totalReturns: number;
-    netSales: number;
-    netProfit: number;
+  totalSales: number;
+  totalExpenses: number;
+  totalReturns: number;
+  netSales: number;
+  netProfit: number;
 }
 
 // ==================== Helper Functions ====================
@@ -61,109 +64,130 @@ export interface ReportTotals {
 /**
  * تصنيف طريقة الدفع إلى فئة أساسية
  */
-function categorizePaymentMethod(method: any): 'cash' | 'card' | 'wallet' | 'other' {
-    if (!method?.type) return 'other';
+function categorizePaymentMethod(
+  method: any
+): "cash" | "card" | "wallet" | "other" {
+  if (!method?.type) return "other";
 
-    const type = method.type.toLowerCase();
+  const type = method.type.toLowerCase();
 
-    if (type === 'cash' || type === 'نقدي') return 'cash';
-    if (type === 'visa' || type === 'card' || type === 'بطاقة' || type === 'bank_transfer') return 'card';
-    if (type === 'wallet' || type === 'محفظة') return 'wallet';
+  if (type === "cash" || type === "نقدي") return "cash";
+  if (
+    type === "visa" ||
+    type === "card" ||
+    type === "بطاقة" ||
+    type === "bank_transfer"
+  )
+    return "card";
+  if (type === "wallet" || type === "محفظة") return "wallet";
 
-    return 'other';
+  return "other";
 }
 
 /**
  * جلب فواتير وردية معينة
  */
 async function getShiftInvoices(shiftId: string): Promise<any[]> {
-    const allInvoices = await db.getAll<any>('invoices');
-    return allInvoices.filter(
-        (inv) => inv.shiftId === shiftId || inv.shiftId === shiftId.toString()
-    );
+  const allInvoices = await db.getAll<any>("invoices");
+  return allInvoices.filter(
+    (inv) => inv.shiftId === shiftId || inv.shiftId === shiftId.toString()
+  );
 }
 
 /**
  * جلب مصروفات وردية معينة
  */
 async function getShiftExpenses(shiftId: string): Promise<any[]> {
-    const allExpenses = await db.getAll<any>('expenseItems');
-    return allExpenses.filter(
-        (exp) => exp.shiftId === shiftId || exp.shiftId === shiftId.toString()
-    );
+  const allExpenses = await db.getAll<any>("expenseItems");
+  return allExpenses.filter(
+    (exp) => exp.shiftId === shiftId || exp.shiftId === shiftId.toString()
+  );
 }
 
 /**
  * جلب حركات النقدية لوردية معينة
  */
 async function getShiftCashMovements(shiftId: string): Promise<any[]> {
-    const allMovements = await db.getAll<any>('cashMovements');
-    return allMovements.filter(
-        (m) => m.shiftId === shiftId || m.shiftId === shiftId.toString()
-    );
+  const allMovements = await db.getAll<any>("cashMovements");
+  return allMovements.filter(
+    (m) => m.shiftId === shiftId || m.shiftId === shiftId.toString()
+  );
 }
 
 /**
  * حساب تفصيل طرق الدفع من الفواتير
  */
 export function calculatePaymentMethodBreakdown(
-    invoices: any[],
-    paymentMethods: any[]
+  invoices: any[],
+  paymentMethods: any[]
 ): Record<string, { name: string; amount: number; type: string }> {
-    const breakdown: Record<string, { name: string; amount: number; type: string }> = {};
+  const breakdown: Record<
+    string,
+    { name: string; amount: number; type: string }
+  > = {};
 
-    // تهيئة جميع طرق الدفع بقيمة 0
-    paymentMethods.forEach((method) => {
-        breakdown[method.id] = {
-            name: method.name,
-            amount: 0,
-            type: method.type || 'other',
-        };
-    });
+  // تهيئة جميع طرق الدفع بقيمة 0
+  paymentMethods.forEach((method) => {
+    breakdown[method.id] = {
+      name: method.name,
+      amount: 0,
+      type: method.type || "other",
+    };
+  });
 
-    // حساب المبلغ لكل طريقة دفع
-    invoices.forEach((inv) => {
-        // النظام الجديد - paymentMethodAmounts
-        if (inv.paymentMethodAmounts && Object.keys(inv.paymentMethodAmounts).length > 0) {
-            Object.entries(inv.paymentMethodAmounts).forEach(
-                ([methodId, amount]: [string, any]) => {
-                    const amountValue = parseFloat(amount) || 0;
+  // حساب المبلغ لكل طريقة دفع
+  invoices.forEach((inv) => {
+    // النظام الجديد - paymentMethodAmounts
+    if (
+      inv.paymentMethodAmounts &&
+      Object.keys(inv.paymentMethodAmounts).length > 0
+    ) {
+      Object.entries(inv.paymentMethodAmounts).forEach(
+        ([methodId, amount]: [string, any]) => {
+          let amountValue = parseFloat(amount) || 0;
+          // if amount is zero and the payment methods is one and named default-payment-cash will take the total of the invoice
+          if (amountValue === 0 && methodId === "default-payment-cash") {
+            amountValue = inv.total || 0;
+          }
 
-                    if (breakdown[methodId]) {
-                        breakdown[methodId].amount += amountValue;
-                    } else {
-                        // طريقة دفع غير موجودة في النظام
-                        const method = inv.paymentMethods?.find?.(
-                            (pm: any) => pm.id === methodId || pm.id === methodId.toString()
-                        );
-                        breakdown[methodId] = {
-                            name: method?.name || methodId,
-                            amount: amountValue,
-                            type: method?.type || 'other',
-                        };
-                    }
-                }
+          if (breakdown[methodId]) {
+            breakdown[methodId].amount += amountValue;
+          } else {
+            // طريقة دفع غير موجودة في النظام
+            const method = inv.paymentMethods?.find?.(
+              (pm: any) => pm.id === methodId || pm.id === methodId.toString()
             );
+            breakdown[methodId] = {
+              name: method?.name || methodId,
+              amount: amountValue,
+              type: method?.type || "other",
+            };
+          }
         }
-        // النظام القديم - paymentType فقط
-        else if (inv.paymentType) {
-            const amount = inv.total || 0;
-            const cashMethod = paymentMethods.find((pm) => pm.type === 'cash');
+      );
+    }
+    // النظام القديم - paymentType فقط
+    else if (inv.paymentType) {
+      const amount = inv.total || 0;
+      const cashMethod = paymentMethods.find((pm) => pm.type === "cash");
 
-            if ((inv.paymentType === 'cash' || inv.paymentType === 'نقدي') && cashMethod) {
-                breakdown[cashMethod.id].amount += amount;
-            }
-        }
-        // لا يوجد معلومات دفع - اعتبارها نقدي افتراضياً
-        else {
-            const cashMethod = paymentMethods.find((pm) => pm.type === 'cash');
-            if (cashMethod) {
-                breakdown[cashMethod.id].amount += inv.total || 0;
-            }
-        }
-    });
+      if (
+        (inv.paymentType === "cash" || inv.paymentType === "نقدي") &&
+        cashMethod
+      ) {
+        breakdown[cashMethod.id].amount += amount;
+      }
+    }
+    // لا يوجد معلومات دفع - اعتبارها نقدي افتراضياً
+    else {
+      const cashMethod = paymentMethods.find((pm) => pm.type === "cash");
+      if (cashMethod) {
+        breakdown[cashMethod.id].amount += inv.total || 0;
+      }
+    }
+  });
 
-    return breakdown;
+  return breakdown;
 }
 
 // ==================== Main Calculation Functions ====================
@@ -172,204 +196,217 @@ export function calculatePaymentMethodBreakdown(
  * حساب مبيعات الوردية بالكامل
  */
 export async function calculateShiftSales(
-    shiftId: string
+  shiftId: string
 ): Promise<ShiftSalesCalculation> {
-    await db.init();
+  await db.init();
 
-    const invoices = await getShiftInvoices(shiftId);
-    const paymentMethods = await db.getAll<any>('paymentMethods');
+  const invoices = await getShiftInvoices(shiftId);
+  const paymentMethods = await db.getAll<any>("paymentMethods");
 
-    // حساب الإجماليات
-    const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalInvoices = invoices.length;
+  // حساب الإجماليات
+  const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const totalInvoices = invoices.length;
 
-    // حساب تفصيل طرق الدفع
-    const paymentMethodBreakdown = calculatePaymentMethodBreakdown(
-        invoices,
-        paymentMethods
-    );
+  // حساب تفصيل طرق الدفع
+  const paymentMethodBreakdown = calculatePaymentMethodBreakdown(
+    invoices,
+    paymentMethods
+  );
 
-    // حساب المبيعات حسب الفئة (cash/card/wallet)
-    let cashSales = 0;
-    let cardSales = 0;
-    let walletSales = 0;
-    let returns = 0;
+  // حساب المبيعات حسب الفئة (cash/card/wallet)
+  let cashSales = 0;
+  let cardSales = 0;
+  let walletSales = 0;
+  let returns = 0;
 
-    Object.values(paymentMethodBreakdown).forEach((data) => {
-        const category = categorizePaymentMethod({ type: data.type });
-        switch (category) {
-            case 'cash':
-                cashSales += data.amount;
-                break;
-            case 'card':
-                cardSales += data.amount;
-                break;
-            case 'wallet':
-                walletSales += data.amount;
-                break;
-        }
-    });
+  Object.values(paymentMethodBreakdown).forEach((data) => {
+    const category = categorizePaymentMethod({ type: data.type });
+    switch (category) {
+      case "cash":
+        cashSales += data.amount;
+        break;
+      case "card":
+        cardSales += data.amount;
+        break;
+      case "wallet":
+        walletSales += data.amount;
+        break;
+    }
+  });
 
-    // حساب المرتجعات
-    invoices.forEach((inv) => {
-        if (inv.returns) returns += inv.returns;
-    });
+  // حساب المرتجعات
+  invoices.forEach((inv) => {
+    if (inv.returns) returns += inv.returns;
+  });
 
-    return {
-        totalSales,
-        totalInvoices,
-        cashSales,
-        cardSales,
-        walletSales,
-        returns,
-        paymentMethodBreakdown,
-    };
+  return {
+    totalSales,
+    totalInvoices,
+    cashSales,
+    cardSales,
+    walletSales,
+    returns,
+    paymentMethodBreakdown,
+  };
 }
 
 /**
  * حساب النقدية المتوقعة للوردية
  */
 export async function calculateExpectedCash(
-    shiftId: string
+  shiftId: string
 ): Promise<ExpectedCashCalculation> {
-    await db.init();
+  await db.init();
 
-    const shift = await db.get<any>('shifts', shiftId.toString());
-    if (!shift) {
-        throw new Error('الوردية غير موجودة');
-    }
+  const shift = await db.get<any>("shifts", shiftId.toString());
+  if (!shift) {
+    throw new Error("الوردية غير موجودة");
+  }
 
-    // جلب البيانات
-    const sales = await calculateShiftSales(shiftId);
-    const expenses = await getShiftExpenses(shiftId);
-    const movements = await getShiftCashMovements(shiftId);
+  // جلب البيانات
+  const sales = await calculateShiftSales(shiftId);
+  const expenses = await getShiftExpenses(shiftId);
+  const movements = await getShiftCashMovements(shiftId);
 
-    // حساب الحركات النقدية
-    const cashIn = movements
-        .filter((m) => m.type === 'in')
-        .reduce((sum, m) => sum + m.amount, 0);
+  // حساب الحركات النقدية
+  const cashIn = movements
+    .filter((m) => m.type === "in")
+    .reduce((sum, m) => sum + m.amount, 0);
 
-    const cashOut = movements
-        .filter((m) => m.type === 'out')
-        .reduce((sum, m) => sum + m.amount, 0);
+  const cashOut = movements
+    .filter((m) => m.type === "out")
+    .reduce((sum, m) => sum + m.amount, 0);
 
-    // حساب المصروفات
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // حساب المصروفات
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // المعادلة الموحدة للنقدية المتوقعة:
-    // النقدية المتوقعة = الرصيد الافتتاحي + المبيعات النقدية + الإيداعات - السحوبات - المصروفات - المرتجعات
-    const expectedCash =
-        shift.startingCash +
-        sales.cashSales +
-        cashIn -
-        cashOut -
-        totalExpenses -
-        sales.returns;
+  // المعادلة الموحدة للنقدية المتوقعة:
+  // النقدية المتوقعة = الرصيد الافتتاحي + المبيعات النقدية + الإيداعات - السحوبات - المصروفات - المرتجعات
+  const expectedCash =
+    shift.startingCash +
+    sales.cashSales +
+    cashIn -
+    cashOut -
+    totalExpenses -
+    sales.returns;
 
-    return {
-        startingCash: shift.startingCash,
-        salesCash: sales.cashSales,
-        cashIn,
-        cashOut,
-        expenses: totalExpenses,
-        returns: sales.returns,
-        expectedCash,
-        expensesList: expenses,
-    };
+  return {
+    startingCash: shift.startingCash,
+    salesCash: sales.cashSales,
+    cashIn,
+    cashOut,
+    expenses: totalExpenses,
+    returns: sales.returns,
+    expectedCash,
+    expensesList: expenses,
+  };
 }
 
 /**
  * حساب ملخص مبيعات يوم معين
  */
 export async function calculateDailySummary(
-    date?: Date
+  date?: Date
 ): Promise<DailySummaryCalculation> {
-    await db.init();
+  await db.init();
 
-    const targetDate = date || new Date();
-    targetDate.setHours(0, 0, 0, 0);
+  const targetDate = date || new Date();
+  targetDate.setHours(0, 0, 0, 0);
 
-    // جلب البيانات
-    const allInvoices = await db.getAll<any>('invoices');
-    const allExpenses = await db.getAll<any>('expenseItems');
-    const allReturns = await db.getAll<any>('salesReturns');
-    const paymentMethods = await db.getAll<any>('paymentMethods');
+  // جلب البيانات
+  const allInvoices = await db.getAll<any>("invoices");
+  const allExpenses = await db.getAll<any>("expenseItems");
+  const allReturns = await db.getAll<any>("salesReturns");
+  const paymentMethods = await db.getAll<any>("paymentMethods");
 
-    // تصفية البيانات اليومية
-    const todayInvoices = allInvoices.filter((inv) => {
-        const invDate = new Date(inv.createdAt);
-        invDate.setHours(0, 0, 0, 0);
-        return invDate.getTime() === targetDate.getTime();
-    });
+  // تصفية البيانات اليومية
+  const todayInvoices = allInvoices.filter((inv) => {
+    const invDate = new Date(inv.createdAt);
+    invDate.setHours(0, 0, 0, 0);
+    return invDate.getTime() === targetDate.getTime();
+  });
 
-    const todayExpenses = allExpenses.filter((exp) => {
-        // تحقق من وجود createdAt
-        if (!exp.createdAt) {
-            console.warn('⚠️ Expense without createdAt:', exp);
-            return false;
-        }
-        const expDate = new Date(exp.createdAt);
-        expDate.setHours(0, 0, 0, 0);
-        return expDate.getTime() === targetDate.getTime();
-    });
+  const todayExpenses = allExpenses.filter((exp) => {
+    // تحقق من وجود createdAt
+    if (!exp.createdAt) {
+      console.warn("⚠️ Expense without createdAt:", exp);
+      return false;
+    }
+    const expDate = new Date(exp.createdAt);
+    expDate.setHours(0, 0, 0, 0);
+    return expDate.getTime() === targetDate.getTime();
+  });
 
-    const todayReturns = allReturns.filter((ret) => {
-        const retDate = new Date(ret.createdAt);
-        retDate.setHours(0, 0, 0, 0);
-        return retDate.getTime() === targetDate.getTime();
-    });
+  const todayReturns = allReturns.filter((ret) => {
+    const retDate = new Date(ret.createdAt);
+    retDate.setHours(0, 0, 0, 0);
+    return retDate.getTime() === targetDate.getTime();
+  });
 
-    // الحسابات
-    const totalSales = todayInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalExpenses = todayExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-    const totalReturns = todayReturns.reduce((sum, ret) => sum + (ret.total || 0), 0);
+  // الحسابات
+  const totalSales = todayInvoices.reduce(
+    (sum, inv) => sum + (inv.total || 0),
+    0
+  );
+  const totalExpenses = todayExpenses.reduce(
+    (sum, exp) => sum + (exp.amount || 0),
+    0
+  );
+  const totalReturns = todayReturns.reduce(
+    (sum, ret) => sum + (ret.total || 0),
+    0
+  );
 
-    // تفصيل طرق الدفع
-    const paymentMethodBreakdown = calculatePaymentMethodBreakdown(
-        todayInvoices,
-        paymentMethods
-    );
+  // تفصيل طرق الدفع
+  const paymentMethodBreakdown = calculatePaymentMethodBreakdown(
+    todayInvoices,
+    paymentMethods
+  );
 
-    // تحويل للصيغة المطلوبة (بدون type)
-    const paymentMethodSales: Record<string, { name: string; amount: number }> = {};
-    Object.entries(paymentMethodBreakdown).forEach(([id, data]) => {
-        paymentMethodSales[id] = {
-            name: data.name,
-            amount: data.amount,
-        };
-    });
-
-    return {
-        date: targetDate.toISOString(),
-        invoiceCount: todayInvoices.length,
-        totalSales,
-        totalExpenses,
-        totalReturns,
-        netProfit: totalSales - totalExpenses - totalReturns,
-        paymentMethodSales,
+  // تحويل للصيغة المطلوبة (بدون type)
+  const paymentMethodSales: Record<string, { name: string; amount: number }> =
+    {};
+  Object.entries(paymentMethodBreakdown).forEach(([id, data]) => {
+    paymentMethodSales[id] = {
+      name: data.name,
+      amount: data.amount,
     };
+  });
+
+  return {
+    date: targetDate.toISOString(),
+    invoiceCount: todayInvoices.length,
+    totalSales,
+    totalExpenses,
+    totalReturns,
+    netProfit: totalSales - totalExpenses - totalReturns,
+    paymentMethodSales,
+  };
 }
 
 /**
  * حساب إجماليات التقارير
  */
 export function calculateReportTotals(
-    invoices: any[],
-    expenses: any[],
-    returns: any[]
+  invoices: any[],
+  expenses: any[],
+  returns: any[]
 ): ReportTotals {
-    const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-    const totalReturns = returns.reduce((sum, ret) => sum + (ret.total || 0), 0);
+  const totalSales = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const totalExpenses = expenses.reduce(
+    (sum, exp) => sum + (exp.amount || 0),
+    0
+  );
+  const totalReturns = returns.reduce((sum, ret) => sum + (ret.total || 0), 0);
 
-    const netSales = totalSales - totalReturns;
-    const netProfit = netSales - totalExpenses;
+  const netSales = totalSales - totalReturns;
+  const netProfit = netSales - totalExpenses;
 
-    return {
-        totalSales,
-        totalExpenses,
-        totalReturns,
-        netSales,
-        netProfit,
-    };
+  return {
+    totalSales,
+    totalExpenses,
+    totalReturns,
+    netSales,
+    netProfit,
+  };
 }
