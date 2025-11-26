@@ -53,20 +53,12 @@ export function ZReportDialog({
   const [shift, setShift] = useState<Shift | null>(null);
   const [cashSummary, setCashSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  const [denominations, setDenominations] = useState<Denominations>({
-    notes200: 0,
-    notes100: 0,
-    notes50: 0,
-    notes20: 0,
-    notes10: 0,
-    notes5: 0,
-    coins1: 0,
-  });
+  const [actualCashInput, setActualCashInput] = useState<string>("");
 
   useEffect(() => {
     if (open) {
       loadReport();
+      setActualCashInput("");
     }
   }, [open, shiftId]);
 
@@ -119,30 +111,23 @@ export function ZReportDialog({
     }
   };
 
-  const calculateTotalFromDenominations = (): number => {
-    return Object.entries(denominations).reduce((total, [key, count]) => {
-      const value = DENOMINATION_VALUES[key as keyof Denominations];
-      return total + value * count;
-    }, 0);
-  };
-
-  const actualCash = calculateTotalFromDenominations();
+  const actualCash = parseFloat(actualCashInput) || 0;
   const difference = actualCash - (cashSummary?.expectedCash || 0);
-
-  const handleDenominationChange = (
-    key: keyof Denominations,
-    value: string
-  ) => {
-    const numValue = parseInt(value) || 0;
-    setDenominations((prev) => ({ ...prev, [key]: numValue }));
-  };
 
   const handleConfirm = () => {
     if (actualCash === 0) {
-      toast.error("يرجى إدخال الفئات النقدية");
+      toast.error("يرجى إدخال المبلغ الفعلي في الدرج");
       return;
     }
-    onConfirm(actualCash, denominations);
+    onConfirm(actualCash, {
+      notes200: 0,
+      notes100: 0,
+      notes50: 0,
+      notes20: 0,
+      notes10: 0,
+      notes5: 0,
+      coins1: 0,
+    });
     onOpenChange(false);
   };
 
@@ -304,127 +289,26 @@ export function ZReportDialog({
               </CardContent>
             </Card>
 
-            {/* إدخال الفئات النقدية */}
+            {/* إدخال النقدية الفعلية */}
             <Card className="border-2 border-primary">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-primary" />
-                  عد النقدية الفعلية
+                  النقدية الفعلية في الدرج
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <Label>فئة 200 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes200 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes200", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes200 * 200)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 100 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes100 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes100", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes100 * 100)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 50 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes50 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes50", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes50 * 50)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 20 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes20 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes20", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes20 * 20)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 10 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes10 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes10", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes10 * 10)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 5 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.notes5 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("notes5", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.notes5 * 5)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <Label>فئة 1 جنيه</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={denominations.coins1 || ""}
-                      onChange={(e) =>
-                        handleDenominationChange("coins1", e.target.value)
-                      }
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      = {formatCurrency(denominations.coins1 * 1)}
-                    </p>
-                  </div>
+                <div>
+                  <Label>المبلغ الفعلي</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={actualCashInput || ""}
+                    onChange={(e) => setActualCashInput(e.target.value)}
+                    placeholder="أدخل المبلغ الفعلي في الدرج"
+                    className="text-lg font-bold mt-2"
+                  />
                 </div>
               </CardContent>
             </Card>
