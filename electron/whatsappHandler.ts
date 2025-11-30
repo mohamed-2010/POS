@@ -27,6 +27,102 @@ const logger = {
 };
 
 /**
+ * رسائل الأخطاء بالعربي للمستخدم
+ */
+const ERROR_MESSAGES = {
+  // أخطاء الاتصال
+  CONNECTION_TIMEOUT: "⏱️ انتهت مهلة الاتصال - جرب مرة تانية",
+  CONNECTION_FAILED: "❌ فشل الاتصال - تأكد من الإنترنت وجرب تاني",
+  NO_CONNECTION: "📵 الحساب مش متصل - اربط الحساب الأول",
+  RECONNECTING: "🔄 جاري إعادة الاتصال...",
+
+  // أخطاء إرسال الرسائل
+  SEND_FAILED: "❌ فشل إرسال الرسالة - جرب مرة تانية",
+  SEND_TIMEOUT: "⏱️ الرسالة أخذت وقت طويل - الإنترنت بطيء",
+  INVALID_NUMBER: "📱 رقم الهاتف غلط - تأكد من الرقم",
+  NUMBER_NOT_ON_WHATSAPP: "📱 الرقم ده مش على واتساب",
+
+  // أخطاء الميديا
+  MEDIA_FAILED: "🖼️ فشل إرسال الصورة/الملف",
+  MEDIA_TOO_LARGE: "📁 الملف كبير جداً - أقصى حجم 16 ميجا",
+  MEDIA_DOWNLOAD_FAILED: "⬇️ فشل تحميل الملف",
+
+  // أخطاء عامة
+  UNKNOWN_ERROR: "⚠️ حصل خطأ - جرب مرة تانية",
+  ACCOUNT_LOGGED_OUT: "🔐 تم تسجيل الخروج - اربط الحساب من جديد",
+  SESSION_EXPIRED: "🔑 الجلسة انتهت - امسح QR Code من جديد",
+
+  // أخطاء الشبكة
+  NO_INTERNET: "🌐 مفيش إنترنت - تأكد من الاتصال",
+  SLOW_INTERNET: "🐌 الإنترنت بطيء جداً",
+};
+
+/**
+ * تحويل الخطأ لرسالة مفهومة
+ */
+function getArabicErrorMessage(error: any): string {
+  const errorMessage = error?.message?.toLowerCase() || "";
+  const statusCode =
+    error?.output?.statusCode || error?.data?.output?.statusCode;
+
+  // Timeout errors
+  if (
+    errorMessage.includes("timed out") ||
+    errorMessage.includes("timeout") ||
+    statusCode === 408
+  ) {
+    return ERROR_MESSAGES.SEND_TIMEOUT;
+  }
+
+  // Connection errors
+  if (
+    errorMessage.includes("not connected") ||
+    errorMessage.includes("no connection")
+  ) {
+    return ERROR_MESSAGES.NO_CONNECTION;
+  }
+
+  if (
+    errorMessage.includes("connection closed") ||
+    errorMessage.includes("connection failed")
+  ) {
+    return ERROR_MESSAGES.CONNECTION_FAILED;
+  }
+
+  // Number errors
+  if (errorMessage.includes("invalid") && errorMessage.includes("number")) {
+    return ERROR_MESSAGES.INVALID_NUMBER;
+  }
+
+  if (
+    errorMessage.includes("not on whatsapp") ||
+    errorMessage.includes("not registered")
+  ) {
+    return ERROR_MESSAGES.NUMBER_NOT_ON_WHATSAPP;
+  }
+
+  // Session errors
+  if (statusCode === DisconnectReason.loggedOut) {
+    return ERROR_MESSAGES.ACCOUNT_LOGGED_OUT;
+  }
+
+  // Media errors
+  if (errorMessage.includes("media") || errorMessage.includes("file")) {
+    if (errorMessage.includes("too large") || errorMessage.includes("size")) {
+      return ERROR_MESSAGES.MEDIA_TOO_LARGE;
+    }
+    return ERROR_MESSAGES.MEDIA_FAILED;
+  }
+
+  // Network errors
+  if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+    return ERROR_MESSAGES.NO_INTERNET;
+  }
+
+  return ERROR_MESSAGES.UNKNOWN_ERROR;
+}
+
+/**
  * Get session directory for WhatsApp auth state
  */
 function getSessionPath(accountId: string): string {
@@ -50,6 +146,9 @@ async function initializeAccount(accountId: string, accountPhone: string) {
       auth: state,
       browser: ["MASR POS Pro", "Chrome", "1.0.0"],
       generateHighQualityLinkPreview: true,
+      connectTimeoutMs: 60000, // 60 seconds timeout
+      defaultQueryTimeoutMs: 60000,
+      retryRequestDelayMs: 250,
     });
 
     // Store socket
@@ -65,34 +164,65 @@ async function initializeAccount(accountId: string, accountPhone: string) {
           status: "qr",
           qrCode: qr,
           phone: accountPhone,
+          message: "📱 امسح الكود ده من الموبايل",
         });
       }
 
       if (connection === "close") {
-        const shouldReconnect =
-          (lastDisconnect?.error as Boom)?.output?.statusCode !==
-          DisconnectReason.loggedOut;
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        if (shouldReconnect) {
+        let errorMessage = ERROR_MESSAGES.CONNECTION_FAILED;
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          errorMessage = ERROR_MESSAGES.ACCOUNT_LOGGED_OUT;
+          activeSockets.delete(accountId);
+          accountStates.set(accountId, {
+            status: "disconnected",
+            phone: accountPhone,
+            error: errorMessage,
+            message: errorMessage,
+          });
+        } else if (shouldReconnect) {
           console.log("Reconnecting WhatsApp...", accountId);
+          accountStates.set(accountId, {
+            status: "connecting",
+            phone: accountPhone,
+            message: ERROR_MESSAGES.RECONNECTING,
+          });
           setTimeout(() => initializeAccount(accountId, accountPhone), 3000);
         } else {
           activeSockets.delete(accountId);
           accountStates.set(accountId, {
             status: "disconnected",
             phone: accountPhone,
+            error: errorMessage,
+            message: errorMessage,
           });
         }
       } else if (connection === "open") {
+        // Get the real phone number from WhatsApp
+        const realPhone =
+          sock.user?.id?.split(":")[0] ||
+          sock.user?.id?.split("@")[0] ||
+          accountPhone;
+
         accountStates.set(accountId, {
           status: "connected",
-          phone: accountPhone,
+          phone: realPhone,
+          message: "✅ تم الاتصال بنجاح!",
         });
-        console.log("WhatsApp connected successfully:", accountId);
+        console.log(
+          "WhatsApp connected successfully:",
+          accountId,
+          "Phone:",
+          realPhone
+        );
       } else if (connection === "connecting") {
         accountStates.set(accountId, {
           status: "connecting",
           phone: accountPhone,
+          message: "🔄 جاري الاتصال...",
         });
       }
     });
@@ -103,18 +233,24 @@ async function initializeAccount(accountId: string, accountPhone: string) {
     return {
       success: true,
       status: "connecting",
-      message: "Initializing WhatsApp connection...",
+      message: "🔄 جاري الاتصال بالواتساب...",
+      messageAr: "جاري الاتصال بالواتساب...",
     };
   } catch (error: any) {
     console.error("Failed to initialize WhatsApp account:", error);
+    const errorMessage = getArabicErrorMessage(error);
+
     accountStates.set(accountId, {
       status: "failed",
-      error: error.message,
+      error: errorMessage,
+      message: errorMessage,
     });
+
     return {
       success: false,
       status: "failed",
-      message: error.message,
+      message: errorMessage,
+      messageAr: errorMessage,
     };
   }
 }
@@ -123,41 +259,86 @@ async function initializeAccount(accountId: string, accountPhone: string) {
  * Get account status and QR code
  */
 function getAccountState(accountId: string) {
-  return accountStates.get(accountId) || { status: "disconnected" };
+  return (
+    accountStates.get(accountId) || {
+      status: "disconnected",
+      message: "📵 الحساب غير متصل",
+    }
+  );
 }
 
 /**
- * Send text message
+ * Send text message with better error handling
  */
 async function sendTextMessage(accountId: string, to: string, message: string) {
   try {
     const sock = activeSockets.get(accountId);
     if (!sock) {
-      throw new Error("WhatsApp account not connected");
+      return {
+        success: false,
+        message: ERROR_MESSAGES.NO_CONNECTION,
+        messageAr: ERROR_MESSAGES.NO_CONNECTION,
+      };
+    }
+
+    // Validate phone number
+    const cleanedNumber = to.replace(/\D/g, "");
+    if (cleanedNumber.length < 10) {
+      return {
+        success: false,
+        message: ERROR_MESSAGES.INVALID_NUMBER,
+        messageAr: ERROR_MESSAGES.INVALID_NUMBER,
+      };
     }
 
     // Format phone number to international format
     const formattedNumber = to.includes("@s.whatsapp.net")
       ? to
-      : `${to.replace(/\D/g, "")}@s.whatsapp.net`;
+      : `${cleanedNumber}@s.whatsapp.net`;
 
-    await sock.sendMessage(formattedNumber, { text: message });
+    // Check if number exists on WhatsApp (optional - can be slow)
+    try {
+      const results = await sock.onWhatsApp(cleanedNumber);
+      if (results && results.length > 0 && !results[0]?.exists) {
+        return {
+          success: false,
+          message: ERROR_MESSAGES.NUMBER_NOT_ON_WHATSAPP,
+          messageAr: ERROR_MESSAGES.NUMBER_NOT_ON_WHATSAPP,
+        };
+      }
+    } catch (checkError) {
+      // Continue anyway if check fails
+      console.warn("Could not verify number:", checkError);
+    }
+
+    // Send with timeout
+    const sendPromise = sock.sendMessage(formattedNumber, { text: message });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timed out")), 30000)
+    );
+
+    await Promise.race([sendPromise, timeoutPromise]);
 
     return {
       success: true,
-      message: "Message sent successfully",
+      message: "✅ تم إرسال الرسالة بنجاح",
+      messageAr: "تم إرسال الرسالة بنجاح",
     };
   } catch (error: any) {
     console.error("Failed to send message:", error);
+    const errorMessage = getArabicErrorMessage(error);
+
     return {
       success: false,
-      message: error.message,
+      message: errorMessage,
+      messageAr: errorMessage,
+      error: error.message,
     };
   }
 }
 
 /**
- * Send media message (image, document, video)
+ * Send media message (image, document, video) with better error handling
  */
 async function sendMediaMessage(
   accountId: string,
@@ -170,16 +351,58 @@ async function sendMediaMessage(
   try {
     const sock = activeSockets.get(accountId);
     if (!sock) {
-      throw new Error("WhatsApp account not connected");
+      return {
+        success: false,
+        message: ERROR_MESSAGES.NO_CONNECTION,
+        messageAr: ERROR_MESSAGES.NO_CONNECTION,
+      };
+    }
+
+    // Validate phone number
+    const cleanedNumber = to.replace(/\D/g, "");
+    if (cleanedNumber.length < 10) {
+      return {
+        success: false,
+        message: ERROR_MESSAGES.INVALID_NUMBER,
+        messageAr: ERROR_MESSAGES.INVALID_NUMBER,
+      };
     }
 
     const formattedNumber = to.includes("@s.whatsapp.net")
       ? to
-      : `${to.replace(/\D/g, "")}@s.whatsapp.net`;
+      : `${cleanedNumber}@s.whatsapp.net`;
 
-    // Fetch media from URL
-    const response = await fetch(mediaUrl);
-    const buffer = Buffer.from(await response.arrayBuffer());
+    // Fetch media from URL with timeout
+    let buffer: Buffer;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(mediaUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch media");
+      }
+
+      buffer = Buffer.from(await response.arrayBuffer());
+
+      // Check file size (max 16MB for WhatsApp)
+      if (buffer.length > 16 * 1024 * 1024) {
+        return {
+          success: false,
+          message: ERROR_MESSAGES.MEDIA_TOO_LARGE,
+          messageAr: ERROR_MESSAGES.MEDIA_TOO_LARGE,
+        };
+      }
+    } catch (fetchError) {
+      console.error("Failed to fetch media:", fetchError);
+      return {
+        success: false,
+        message: ERROR_MESSAGES.MEDIA_DOWNLOAD_FAILED,
+        messageAr: ERROR_MESSAGES.MEDIA_DOWNLOAD_FAILED,
+      };
+    }
 
     let messageContent: any = {};
 
@@ -205,17 +428,28 @@ async function sendMediaMessage(
         break;
     }
 
-    await sock.sendMessage(formattedNumber, messageContent);
+    // Send with timeout
+    const sendPromise = sock.sendMessage(formattedNumber, messageContent);
+    const timeoutPromise = new Promise(
+      (_, reject) => setTimeout(() => reject(new Error("Timed out")), 60000) // 60 seconds for media
+    );
+
+    await Promise.race([sendPromise, timeoutPromise]);
 
     return {
       success: true,
-      message: "Media sent successfully",
+      message: "✅ تم إرسال الملف بنجاح",
+      messageAr: "تم إرسال الملف بنجاح",
     };
   } catch (error: any) {
     console.error("Failed to send media:", error);
+    const errorMessage = getArabicErrorMessage(error);
+
     return {
       success: false,
-      message: error.message,
+      message: errorMessage,
+      messageAr: errorMessage,
+      error: error.message,
     };
   }
 }
@@ -233,13 +467,19 @@ async function disconnectAccount(accountId: string) {
     }
     return {
       success: true,
-      message: "Disconnected successfully",
+      message: "✅ تم قطع الاتصال",
+      messageAr: "تم قطع الاتصال",
     };
   } catch (error: any) {
     console.error("Failed to disconnect:", error);
+    // Force cleanup even if logout fails
+    activeSockets.delete(accountId);
+    accountStates.delete(accountId);
+
     return {
-      success: false,
-      message: error.message,
+      success: true, // Still consider it successful since account is now disconnected
+      message: "✅ تم قطع الاتصال",
+      messageAr: "تم قطع الاتصال",
     };
   }
 }

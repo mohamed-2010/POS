@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs";
 import "./crypto-polyfill.js"; // Must be imported BEFORE whatsappHandler
 import { registerWhatsAppHandlers } from "./whatsappHandler.js";
+import { registerLicenseHandlers, verifyLicense } from "./licenseManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -123,6 +124,8 @@ if (!gotTheLock) {
 
   // عند استعداد التطبيق
   app.whenReady().then(() => {
+    // Register License IPC handlers
+    registerLicenseHandlers();
     // Register WhatsApp IPC handlers
     registerWhatsAppHandlers();
     createWindow();

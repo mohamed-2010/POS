@@ -6,6 +6,48 @@ declare global {
       getAppPath: () => Promise<string>;
       getUserDataPath: () => Promise<string>;
       getDatabasePath: () => Promise<string>;
+      license: {
+        getDeviceId: () => Promise<string>;
+        getHardwareInfo: () => Promise<{
+          cpuId: string;
+          macAddress: string;
+          hostname: string;
+          platform: string;
+          diskSerial: string;
+          username: string;
+        }>;
+        verify: () => Promise<{
+          valid: boolean;
+          message: string;
+          data?: {
+            licenseKey: string;
+            deviceId: string;
+            activationDate: string;
+            expiryDate?: string;
+            customerName?: string;
+          };
+        }>;
+        activate: (
+          licenseKey: string,
+          customerName?: string,
+          expiryDate?: string
+        ) => Promise<{ success: boolean; message: string; deviceId?: string }>;
+        deactivate: (
+          confirmationCode: string
+        ) => Promise<{ success: boolean; message: string }>;
+        getData: () => Promise<{
+          success: boolean;
+          message?: string;
+          data?: {
+            licenseKey: string;
+            deviceId: string;
+            activationDate: string;
+            expiryDate?: string;
+            customerName?: string;
+          };
+        }>;
+        generateKey: () => Promise<string | null>;
+      };
       whatsapp: {
         initAccount: (
           accountId: string,

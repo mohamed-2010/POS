@@ -7,6 +7,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAppPath: () => ipcRenderer.invoke("get-app-path"),
   getUserDataPath: () => ipcRenderer.invoke("get-user-data-path"),
 
+  // License APIs
+  license: {
+    getDeviceId: () => ipcRenderer.invoke("license:get-device-id"),
+    getHardwareInfo: () => ipcRenderer.invoke("license:get-hardware-info"),
+    verify: () => ipcRenderer.invoke("license:verify"),
+    activate: (
+      licenseKey: string,
+      customerName?: string,
+      expiryDate?: string
+    ) =>
+      ipcRenderer.invoke(
+        "license:activate",
+        licenseKey,
+        customerName,
+        expiryDate
+      ),
+    deactivate: (confirmationCode: string) =>
+      ipcRenderer.invoke("license:deactivate", confirmationCode),
+    getData: () => ipcRenderer.invoke("license:get-data"),
+    generateKey: () => ipcRenderer.invoke("license:generate-key"),
+  },
+
   // WhatsApp APIs
   whatsapp: {
     initAccount: (accountId: string, accountPhone: string) =>
@@ -62,6 +84,48 @@ declare global {
       getAppVersion: () => Promise<string>;
       getAppPath: () => Promise<string>;
       getUserDataPath: () => Promise<string>;
+      license: {
+        getDeviceId: () => Promise<string>;
+        getHardwareInfo: () => Promise<{
+          cpuId: string;
+          macAddress: string;
+          hostname: string;
+          platform: string;
+          diskSerial: string;
+          username: string;
+        }>;
+        verify: () => Promise<{
+          valid: boolean;
+          message: string;
+          data?: {
+            licenseKey: string;
+            deviceId: string;
+            activationDate: string;
+            expiryDate?: string;
+            customerName?: string;
+          };
+        }>;
+        activate: (
+          licenseKey: string,
+          customerName?: string,
+          expiryDate?: string
+        ) => Promise<{ success: boolean; message: string; deviceId?: string }>;
+        deactivate: (
+          confirmationCode: string
+        ) => Promise<{ success: boolean; message: string }>;
+        getData: () => Promise<{
+          success: boolean;
+          message?: string;
+          data?: {
+            licenseKey: string;
+            deviceId: string;
+            activationDate: string;
+            expiryDate?: string;
+            customerName?: string;
+          };
+        }>;
+        generateKey: () => Promise<string | null>;
+      };
       whatsapp: {
         initAccount: (
           accountId: string,

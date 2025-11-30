@@ -262,52 +262,6 @@ export function ElectronInfo() {
   );
 }
 
-// تعريف الأنواع للـ TypeScript (يمكن وضعها في ملف منفصل)
-declare global {
-  interface Window {
-    electronAPI?: {
-      getAppVersion: () => Promise<string>;
-      getAppPath: () => Promise<string>;
-      getDatabasePath: () => Promise<string>;
-      products: {
-        getAll: () => Promise<any>;
-        getById: (id: number) => Promise<any>;
-        getByBarcode: (barcode: string) => Promise<any>;
-        search: (searchTerm: string) => Promise<any>;
-        create: (product: any) => Promise<any>;
-        update: (id: number, product: any) => Promise<any>;
-        delete: (id: number) => Promise<any>;
-      };
-      customers: {
-        getAll: () => Promise<any>;
-        getById: (id: number) => Promise<any>;
-        search: (searchTerm: string) => Promise<any>;
-        create: (customer: any) => Promise<any>;
-        update: (id: number, customer: any) => Promise<any>;
-        delete: (id: number) => Promise<any>;
-      };
-      invoices: {
-        getAll: (limit?: number) => Promise<any>;
-        getById: (id: number) => Promise<any>;
-        create: (invoice: any, items: any[]) => Promise<any>;
-        cancel: (id: number) => Promise<any>;
-      };
-      settings: {
-        get: (key: string) => Promise<any>;
-        set: (key: string, value: string) => Promise<any>;
-        getAll: () => Promise<any>;
-      };
-      reports: {
-        dailySales: (date: string) => Promise<any>;
-        topSellingProducts: (
-          limit?: number,
-          startDate?: string,
-          endDate?: string
-        ) => Promise<any>;
-        lowStockProducts: () => Promise<any>;
-      };
-    };
-  }
-}
+// Note: Window.electronAPI types are defined in src/types/electron.d.ts
 
 export {};

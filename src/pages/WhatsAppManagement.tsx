@@ -20,8 +20,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSettingsContext } from "@/contexts/SettingsContext";
 import { db, WhatsAppAccount } from "@/lib/indexedDB";
 import { whatsappService } from "@/services/whatsapp/whatsappService";
 import {
@@ -33,22 +35,86 @@ import {
   Wifi,
   WifiOff,
   Loader2,
+  AlertCircle,
+  CheckCircle2,
+  HelpCircle,
+  RefreshCw,
+  Infinity,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { getQRColors } from "@/lib/theme.config";
 import { useTheme } from "next-themes";
 import QRCodeLib from "qrcode";
 
+/**
+ * رسائل المساعدة للمستخدم
+ */
+const HELP_MESSAGES = {
+  NO_ACCOUNTS: {
+    title: "👋 مرحباً بك في واتساب",
+    description: "عشان تبدأ ترسل رسائل للعملاء، محتاج تضيف حساب واتساب وتربطه",
+    steps: [
+      "1️⃣ اضغط على زر 'إضافة حساب'",
+      "2️⃣ أدخل اسم للحساب ورقم الموبايل",
+      "3️⃣ اضغط 'ربط' وامسح الكود من الموبايل",
+    ],
+  },
+  CONNECTION_HELP: {
+    title: "📱 طريقة ربط الحساب",
+    steps: [
+      "1️⃣ افتح واتساب على الموبايل",
+      "2️⃣ اضغط على النقط الثلاثة (⋮) أو الإعدادات",
+      "3️⃣ اختر 'الأجهزة المرتبطة'",
+      "4️⃣ اضغط 'ربط جهاز'",
+      "5️⃣ امسح الكود اللي على الشاشة",
+    ],
+  },
+  TROUBLESHOOTING: {
+    title: "🔧 حل المشاكل",
+    issues: [
+      {
+        problem: "الكود مش بيتمسح",
+        solution: "تأكد إن الموبايل متصل بالنت وقريب من الشاشة",
+      },
+      {
+        problem: "الحساب بيفصل كتير",
+        solution: "تأكد إن الموبايل مفتوح فيه واتساب ومتصل بالنت",
+      },
+      {
+        problem: "الرسائل مش بتتبعت",
+        solution: "تأكد إن الحساب متصل (أخضر) ونشط",
+      },
+    ],
+  },
+};
+
 const WhatsAppManagement = () => {
   const { toast } = useToast();
   const { can } = useAuth();
   const { theme } = useTheme();
+  const { getSetting } = useSettingsContext();
+
+  // الحد الأقصى لعدد الحسابات (0 = بلا حد)
+  const maxWhatsAppAccounts = parseInt(
+    getSetting("whatsappMaxAccounts") || "0"
+  );
+  const isUnlimited = maxWhatsAppAccounts === 0;
+
   const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
   const [addDialog, setAddDialog] = useState(false);
   const [qrDialog, setQrDialog] = useState(false);
+  const [helpDialog, setHelpDialog] = useState(false);
   const [selectedQR, setSelectedQR] = useState<string>("");
   const [qrImage, setQrImage] = useState<string>("");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // هل يمكن إضافة حساب جديد؟
+  const canAddMoreAccounts =
+    isUnlimited || accounts.length < maxWhatsAppAccounts;
+  const remainingAccounts = isUnlimited
+    ? Infinity
+    : maxWhatsAppAccounts - accounts.length;
 
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
@@ -72,15 +138,24 @@ const WhatsAppManagement = () => {
   useEffect(() => {
     loadAccounts();
 
-    // Network listener
+    // Network listener with better messages
     const handleOnline = () => {
       setIsOnline(true);
-      toast({ title: "🌐 الإنترنت متصل" });
+      setConnectionError(null);
+      toast({
+        title: "🌐 تمام! الإنترنت رجع",
+        description: "تقدر تبعت رسائل دلوقتي",
+      });
     };
 
     const handleOffline = () => {
       setIsOnline(false);
-      toast({ title: "🌐 الإنترنت غير متصل", variant: "destructive" });
+      setConnectionError("مفيش إنترنت - تأكد من الاتصال وجرب تاني");
+      toast({
+        title: "🌐 الإنترنت فصل!",
+        description: "الرسائل هتتبعت لما النت يرجع",
+        variant: "destructive",
+      });
     };
 
     window.addEventListener("online", handleOnline);
@@ -190,8 +265,8 @@ const WhatsAppManagement = () => {
   };
 
   const handleAddAccount = async () => {
-    if (!newAccount.name || !newAccount.phone) {
-      toast({ title: "الاسم والرقم مطلوبان", variant: "destructive" });
+    if (!newAccount.name) {
+      toast({ title: "اسم الحساب مطلوب", variant: "destructive" });
       return;
     }
 
@@ -200,7 +275,7 @@ const WhatsAppManagement = () => {
       const account: WhatsAppAccount = {
         id: Date.now().toString(),
         name: newAccount.name,
-        phone: newAccount.phone,
+        phone: "", // سيتم تحديثه تلقائياً عند الربط
         status: "disconnected",
         dailyLimit: newAccount.dailyLimit,
         dailySent: 0,
@@ -258,10 +333,13 @@ const WhatsAppManagement = () => {
 
           if (state.status === "qr" && state.qrCode) {
             setSelectedQR(state.qrCode);
+            setConnectionError(null);
 
             // Convert QR code text to image
             try {
-              const qrColors = getQRColors((theme as 'light' | 'dark') || 'light');
+              const qrColors = getQRColors(
+                (theme as "light" | "dark") || "light"
+              );
               const qrImageUrl = await QRCodeLib.toDataURL(state.qrCode, {
                 width: 400,
                 margin: 2,
@@ -275,7 +353,11 @@ const WhatsAppManagement = () => {
               setConnectingAccount(null);
             } catch (err) {
               console.error("Failed to generate QR image:", err);
-              toast({ title: "فشل إنشاء صورة QR", variant: "destructive" });
+              toast({
+                title: "⚠️ مشكلة في الكود",
+                description: "جرب اضغط 'ربط' تاني",
+                variant: "destructive",
+              });
             }
 
             // Don't stop polling yet - wait for connection
@@ -288,8 +370,9 @@ const WhatsAppManagement = () => {
             setQrImage("");
             setSelectedQR("");
             setConnectingAccount(null);
+            setConnectionError(null);
 
-            // Update database status
+            // Update database status with real phone number from WhatsApp
             const account = await db.get<WhatsAppAccount>(
               "whatsappAccounts",
               accountId
@@ -297,21 +380,30 @@ const WhatsAppManagement = () => {
             if (account) {
               account.status = "connected";
               account.lastConnectedAt = new Date().toISOString();
+              // حفظ رقم الهاتف الحقيقي من واتساب
+              if (state.phone) {
+                account.phone = state.phone;
+              }
               await db.update("whatsappAccounts", account);
             }
             await loadAccounts();
             toast({
-              title: "✅ تم الاتصال بنجاح",
-              description: `الحساب ${account?.name} متصل الآن`,
+              title: "🎉 تمام! الحساب اتربط",
+              description: `${account?.name} جاهز لإرسال الرسائل - فعّله عشان يشتغل`,
             });
           } else if (state.status === "failed") {
             if (pollQR) window.clearInterval(pollQR);
             if (countdownInterval) window.clearInterval(countdownInterval);
             setQrDialog(false);
             setConnectingAccount(null);
+
+            const errorMsg =
+              state.message || state.error || "فشل الاتصال - جرب تاني";
+            setConnectionError(errorMsg);
+
             toast({
-              title: "فشل الاتصال",
-              description: state.error,
+              title: "❌ مشكلة في الاتصال",
+              description: errorMsg,
               variant: "destructive",
             });
           }
@@ -437,6 +529,16 @@ const WhatsAppManagement = () => {
             </p>
           </div>
           <div className="flex gap-3 items-center">
+            {/* Help Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setHelpDialog(true)}
+              title="مساعدة"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+
             {/* Network Status */}
             <Badge
               variant={isOnline ? "default" : "destructive"}
@@ -445,41 +547,107 @@ const WhatsAppManagement = () => {
               {isOnline ? (
                 <>
                   <Wifi className="h-4 w-4 ml-2" />
-                  متصل
+                  متصل بالنت
                 </>
               ) : (
                 <>
                   <WifiOff className="h-4 w-4 ml-2" />
-                  غير متصل
+                  مفيش نت!
                 </>
               )}
             </Badge>
 
             {/* Reset Database Button */}
-            <Button variant="outline" onClick={handleResetDatabase} size="sm">
-              <Power className="h-4 w-4 ml-2" />
-              إعادة إنشاء DB
-            </Button>
+            {/* <Button variant="outline" onClick={handleResetDatabase} size="sm">
+              <RefreshCw className="h-4 w-4 ml-2" />
+              إعادة تعيين
+            </Button> */}
 
-            {can("whatsapp", "create") && (
-              <Button onClick={() => setAddDialog(true)}>
-                <Plus className="h-4 w-4 ml-2" />
-                إضافة حساب
-              </Button>
-            )}
+            <Button
+              onClick={() => setAddDialog(true)}
+              disabled={!canAddMoreAccounts}
+              title={
+                !canAddMoreAccounts
+                  ? "وصلت للحد الأقصى من الحسابات"
+                  : "إضافة حساب جديد"
+              }
+            >
+              <Plus className="h-4 w-4 ml-2" />
+              إضافة حساب
+            </Button>
           </div>
         </div>
 
+        {/* Limit Reached Alert */}
+        {!canAddMoreAccounts && (
+          <Alert className="mb-6 border-orange-500 bg-orange-50 dark:bg-orange-950">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertTitle className="text-orange-600">
+              وصلت للحد الأقصى!
+            </AlertTitle>
+            <AlertDescription>
+              الحد الأقصى المسموح به هو {maxWhatsAppAccounts} حساب. احذف حساب
+              قديم لإضافة حساب جديد.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Error Alert */}
+        {connectionError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>حصلت مشكلة</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>{connectionError}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConnectionError(null)}
+              >
+                تمام
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Offline Alert */}
+        {!isOnline && (
+          <Alert variant="destructive" className="mb-6">
+            <WifiOff className="h-4 w-4" />
+            <AlertTitle>مفيش إنترنت!</AlertTitle>
+            <AlertDescription>
+              تأكد إن الجهاز متصل بالإنترنت عشان تقدر تربط الحسابات وتبعت رسائل
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <Card>
+          <Card className={!canAddMoreAccounts ? "border-orange-500" : ""}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                إجمالي الحسابات
+                عدد الحسابات
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{accounts.length}</div>
+              <div className="text-2xl font-bold flex items-center gap-2">
+                {accounts.length}
+                <span className="text-muted-foreground text-lg">/</span>
+                {isUnlimited ? (
+                  <Infinity className="h-6 w-6 text-muted-foreground" />
+                ) : (
+                  <span className="text-muted-foreground">
+                    {maxWhatsAppAccounts}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isUnlimited
+                  ? "بلا حد أقصى"
+                  : canAddMoreAccounts
+                  ? `متبقي ${remainingAccounts} حساب`
+                  : "وصلت للحد الأقصى"}
+              </p>
             </CardContent>
           </Card>
 
@@ -525,27 +693,61 @@ const WhatsAppManagement = () => {
 
         {/* Accounts Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>الحسابات المتصلة ({accounts.length})</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>الحسابات ({accounts.length})</CardTitle>
+            {accounts.length > 0 && (
+              <Button
+                onClick={() => {
+                  if (!canAddMoreAccounts) {
+                    toast({
+                      title: "⚠️ وصلت للحد الأقصى",
+                      description: `الحد الأقصى المسموح هو ${maxWhatsAppAccounts} حساب`,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setAddDialog(true);
+                }}
+                variant={canAddMoreAccounts ? "default" : "secondary"}
+                size="sm"
+              >
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة حساب جديد
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">جاري تحميل الحسابات...</p>
+                <p className="text-muted-foreground">جاري التحميل...</p>
               </div>
             ) : accounts.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                <p className="text-lg font-medium mb-2">
-                  لا توجد حسابات WhatsApp
+              <div className="text-center py-12">
+                <MessageSquare className="h-20 w-20 mx-auto mb-6 text-primary opacity-50" />
+                <h3 className="text-xl font-bold mb-2">
+                  {HELP_MESSAGES.NO_ACCOUNTS.title}
+                </h3>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  {HELP_MESSAGES.NO_ACCOUNTS.description}
                 </p>
-                <p className="text-sm mb-4">
-                  ابدأ بإضافة أول حساب للبدء في إرسال الرسائل
-                </p>
-                <Button onClick={() => setAddDialog(true)} size="lg">
-                  <Plus className="h-4 w-4 ml-2" />
-                  أضف أول حساب
+
+                <div className="bg-muted rounded-lg p-6 max-w-sm mx-auto mb-6 text-right">
+                  <p className="font-medium mb-3">الخطوات:</p>
+                  {HELP_MESSAGES.NO_ACCOUNTS.steps.map((step, i) => (
+                    <p key={i} className="text-sm text-muted-foreground mb-2">
+                      {step}
+                    </p>
+                  ))}
+                </div>
+
+                <Button
+                  onClick={() => setAddDialog(true)}
+                  size="lg"
+                  className="text-lg px-8"
+                >
+                  <Plus className="h-5 w-5 ml-2" />
+                  أضف حساب واتساب
                 </Button>
               </div>
             ) : (
@@ -580,6 +782,7 @@ const WhatsAppManagement = () => {
                       <TableCell>{account.antiSpamDelay / 1000}ث</TableCell>
                       <TableCell>
                         <Switch
+                          dir="ltr"
                           checked={account.isActive}
                           onCheckedChange={() => handleToggleActive(account)}
                           disabled={account.status !== "connected"}
@@ -588,8 +791,8 @@ const WhatsAppManagement = () => {
                       <TableCell>
                         {account.lastConnectedAt
                           ? new Date(account.lastConnectedAt).toLocaleString(
-                            "ar"
-                          )
+                              "ar"
+                            )
                           : "-"}
                       </TableCell>
                       <TableCell>
@@ -712,17 +915,10 @@ const WhatsAppManagement = () => {
                 />
               </div>
 
-              <div>
-                <Label>رقم الهاتف *</Label>
-                <Input
-                  value={newAccount.phone}
-                  onChange={(e) =>
-                    setNewAccount({ ...newAccount, phone: e.target.value })
-                  }
-                  placeholder="201234567890"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  أدخل الرقم بصيغة دولية (مثال: 201234567890)
+              <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                  <span>📱</span>
+                  <span>رقم الهاتف هيتجاب تلقائي لما تمسح الـ QR Code</span>
                 </p>
               </div>
 
@@ -771,9 +967,7 @@ const WhatsAppManagement = () => {
               </Button>
               <Button
                 onClick={handleAddAccount}
-                disabled={
-                  isAddingAccount || !newAccount.name || !newAccount.phone
-                }
+                disabled={isAddingAccount || !newAccount.name}
               >
                 {isAddingAccount ? (
                   <>
@@ -842,9 +1036,9 @@ const WhatsAppManagement = () => {
                 <div className="w-80 h-80 flex items-center justify-center bg-muted rounded-lg">
                   <div className="text-center">
                     <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-                    <p className="font-medium">جاري إنشاء رمز QR...</p>
+                    <p className="font-medium">جاري إنشاء الكود...</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      يرجى الانتظار لحظات
+                      استنى ثواني
                     </p>
                   </div>
                 </div>
@@ -855,6 +1049,73 @@ const WhatsAppManagement = () => {
               <Button variant="outline" onClick={() => setQrDialog(false)}>
                 إغلاق
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Help Dialog */}
+        <Dialog open={helpDialog} onOpenChange={setHelpDialog}>
+          <DialogContent dir="rtl" className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-xl flex items-center gap-2">
+                <HelpCircle className="h-6 w-6 text-primary" />
+                مساعدة - كيف تستخدم الواتساب؟
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Connection Help */}
+              <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-4">
+                <h4 className="font-bold mb-3 flex items-center gap-2">
+                  <QrCode className="h-5 w-5" />
+                  {HELP_MESSAGES.CONNECTION_HELP.title}
+                </h4>
+                <div className="space-y-2">
+                  {HELP_MESSAGES.CONNECTION_HELP.steps.map((step, i) => (
+                    <p key={i} className="text-sm">
+                      {step}
+                    </p>
+                  ))}
+                </div>
+              </div>
+
+              {/* Troubleshooting */}
+              <div className="bg-orange-50 dark:bg-orange-950 rounded-lg p-4">
+                <h4 className="font-bold mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5" />
+                  {HELP_MESSAGES.TROUBLESHOOTING.title}
+                </h4>
+                <div className="space-y-3">
+                  {HELP_MESSAGES.TROUBLESHOOTING.issues.map((issue, i) => (
+                    <div key={i} className="text-sm">
+                      <p className="font-medium text-destructive">
+                        ❌ {issue.problem}
+                      </p>
+                      <p className="text-muted-foreground mr-4">
+                        ✅ {issue.solution}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4">
+                <h4 className="font-bold mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5" />
+                  نصائح مهمة
+                </h4>
+                <ul className="text-sm space-y-2">
+                  <li>💡 خلي الموبايل مفتوح فيه واتساب ومتصل بالنت</li>
+                  <li>💡 متبعتش رسائل كتير في وقت قصير عشان الحساب ميتحظرش</li>
+                  <li>💡 استخدم الحد اليومي (100-300 رسالة) عشان تكون آمن</li>
+                  <li>💡 لو الحساب فصل، امسح الكود تاني من الموبايل</li>
+                </ul>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => setHelpDialog(false)}>فهمت، شكراً!</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

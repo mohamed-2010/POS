@@ -5,6 +5,64 @@ const isElectron = () => {
   return typeof window !== "undefined" && window.electronAPI !== undefined;
 };
 
+/**
+ * رسائل الأخطاء بالعربي للمستخدم
+ */
+const ERROR_MESSAGES_AR = {
+  // بيئة التشغيل
+  NOT_ELECTRON: "⚠️ الواتساب يعمل فقط في تطبيق الكمبيوتر",
+
+  // أخطاء الحساب
+  ACCOUNT_NOT_FOUND: "❌ الحساب غير موجود",
+  ACCOUNT_NOT_ACTIVE: "⚠️ الحساب غير نشط - فعّل الحساب الأول",
+  ACCOUNT_NOT_CONNECTED: "📵 الحساب مش متصل - اربط الحساب الأول",
+  NO_ACTIVE_ACCOUNT: "📵 مفيش حساب واتساب نشط - أضف حساب وفعّله",
+
+  // أخطاء إرسال الرسائل
+  DAILY_LIMIT_REACHED: "⏰ وصلت للحد الأقصى للرسائل اليوم - جرب بكره",
+  SEND_FAILED: "❌ فشل إرسال الرسالة - جرب مرة تانية",
+  QUEUE_FAILED: "❌ فشل إضافة الرسالة للقائمة",
+
+  // أخطاء الحملات
+  CAMPAIGN_NOT_FOUND: "❌ الحملة غير موجودة",
+  CAMPAIGN_FAILED: "❌ فشل تشغيل الحملة",
+
+  // أخطاء العملاء
+  CUSTOMER_NOT_FOUND: "❌ العميل غير موجود",
+  NO_PHONE: "📱 العميل ده مسجلش رقم موبايل",
+
+  // أخطاء الفواتير
+  INVOICE_NOT_FOUND: "❌ الفاتورة غير موجودة",
+
+  // أخطاء الشبكة
+  NO_INTERNET: "🌐 مفيش إنترنت - تأكد من الاتصال",
+
+  // أخطاء عامة
+  UNKNOWN_ERROR: "⚠️ حصل خطأ - جرب مرة تانية",
+};
+
+/**
+ * تحويل خطأ لرسالة عربية مفهومة
+ */
+function getArabicError(error: any): string {
+  const msg = error?.message?.toLowerCase() || "";
+
+  if (msg.includes("electron")) return ERROR_MESSAGES_AR.NOT_ELECTRON;
+  if (msg.includes("not found") && msg.includes("account"))
+    return ERROR_MESSAGES_AR.ACCOUNT_NOT_FOUND;
+  if (msg.includes("not active")) return ERROR_MESSAGES_AR.ACCOUNT_NOT_ACTIVE;
+  if (msg.includes("not connected"))
+    return ERROR_MESSAGES_AR.ACCOUNT_NOT_CONNECTED;
+  if (msg.includes("daily limit")) return ERROR_MESSAGES_AR.DAILY_LIMIT_REACHED;
+  if (msg.includes("campaign")) return ERROR_MESSAGES_AR.CAMPAIGN_NOT_FOUND;
+  if (msg.includes("customer")) return ERROR_MESSAGES_AR.CUSTOMER_NOT_FOUND;
+  if (msg.includes("invoice")) return ERROR_MESSAGES_AR.INVOICE_NOT_FOUND;
+  if (msg.includes("network") || msg.includes("offline"))
+    return ERROR_MESSAGES_AR.NO_INTERNET;
+
+  return ERROR_MESSAGES_AR.UNKNOWN_ERROR;
+}
+
 // Queue System for Messages
 export interface WhatsAppMessage {
   id: string;
@@ -22,6 +80,7 @@ export interface WhatsAppMessage {
   scheduledAt?: string;
   sentAt?: string;
   error?: string;
+  errorAr?: string; // رسالة الخطأ بالعربي
   metadata?: {
     invoiceId?: string;
     customerId?: string;
@@ -191,7 +250,10 @@ class WhatsAppService {
   }
 
   private async processNextMessage() {
-    if (!this.isOnline) return;
+    if (!this.isOnline) {
+      console.log("📵 [WhatsApp] Offline - waiting for connection...");
+      return;
+    }
 
     this.isProcessing = true;
 
@@ -203,9 +265,19 @@ class WhatsAppService {
 
     try {
       const account = await this.getAccount(message.accountId);
-      if (!account || !account.isActive) {
+      if (!account) {
         message.status = "failed";
-        message.error = "Account not available";
+        message.error = "Account not found";
+        message.errorAr = ERROR_MESSAGES_AR.ACCOUNT_NOT_FOUND;
+        await this.saveQueue();
+        this.isProcessing = false;
+        return;
+      }
+
+      if (!account.isActive) {
+        message.status = "failed";
+        message.error = "Account not active";
+        message.errorAr = ERROR_MESSAGES_AR.ACCOUNT_NOT_ACTIVE;
         await this.saveQueue();
         this.isProcessing = false;
         return;
@@ -219,6 +291,7 @@ class WhatsAppService {
       if (account.dailySent >= account.dailyLimit) {
         message.status = "failed";
         message.error = "Daily limit reached";
+        message.errorAr = ERROR_MESSAGES_AR.DAILY_LIMIT_REACHED;
         await this.saveQueue();
         this.isProcessing = false;
         return;
@@ -236,6 +309,12 @@ class WhatsAppService {
           message.accountId
         );
         if (!isConnected) {
+          console.log(
+            "🔄 [WhatsApp] Account not connected, trying to reconnect..."
+          );
+          message.status = "pending"; // Reset to pending for retry
+          message.errorAr = ERROR_MESSAGES_AR.ACCOUNT_NOT_CONNECTED;
+          await this.saveQueue();
           await this.initAccount(message.accountId);
           this.isProcessing = false;
           return;
@@ -261,16 +340,22 @@ class WhatsAppService {
         }
 
         if (!result.success) {
-          throw new Error(result.message);
+          // Use Arabic error message from backend if available
+          const errorMsg =
+            result.messageAr || result.message || ERROR_MESSAGES_AR.SEND_FAILED;
+          throw new Error(errorMsg);
         }
       } else {
-        throw new Error("WhatsApp requires Electron environment");
+        throw new Error(ERROR_MESSAGES_AR.NOT_ELECTRON);
       }
 
       message.status = "sent";
       message.sentAt = new Date().toISOString();
+      message.errorAr = undefined; // Clear any previous error
       await this.incrementDailySent(message.accountId);
       await this.saveQueue();
+
+      console.log("✅ [WhatsApp] Message sent successfully to:", message.to);
 
       // Remove from queue after 24 hours
       setTimeout(() => {
@@ -280,12 +365,24 @@ class WhatsAppService {
         this.saveQueue();
       }, 24 * 60 * 60 * 1000);
     } catch (error: any) {
+      console.error("❌ [WhatsApp] Failed to send message:", error.message);
+
       message.retries++;
+      message.error = error.message;
+      message.errorAr = getArabicError(error) || error.message;
+
       if (message.retries >= 3) {
         message.status = "failed";
-        message.error = error.message;
+        console.error(
+          "❌ [WhatsApp] Message failed after 3 retries:",
+          message.to
+        );
       } else {
         message.status = "pending";
+        console.log(
+          `🔄 [WhatsApp] Will retry (${message.retries}/3):`,
+          message.to
+        );
       }
       await this.saveQueue();
     }
@@ -379,66 +476,109 @@ class WhatsAppService {
   async sendInstallmentReminder(
     customerId: string,
     installmentId: string
-  ): Promise<void> {
-    // Get customer and installment details
-    const customer = await db.get("customers", customerId);
-    // Get active WhatsApp account
-    const accounts = await db.getAll<WhatsAppAccount>("whatsappAccounts");
-    const activeAccount = accounts.find(
-      (a) => a.isActive && a.status === "connected"
-    );
-
-    if (!activeAccount || !customer) return;
-
-    const message = `مرحباً ${
-      (customer as any).name
-    }،\n\nتذكير بموعد دفع القسط المستحق.\nيرجى التواصل معنا لإتمام الدفع.\n\nشكراً لتعاملكم معنا 🙏`;
-
-    await this.sendMessage(
-      activeAccount.id,
-      (customer as any).phone,
-      message,
-      undefined,
-      {
-        customerId,
-        type: "reminder",
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // Get customer and installment details
+      const customer = await db.get("customers", customerId);
+      if (!customer) {
+        return {
+          success: false,
+          message: ERROR_MESSAGES_AR.CUSTOMER_NOT_FOUND,
+        };
       }
-    );
+
+      if (!(customer as any).phone) {
+        return { success: false, message: ERROR_MESSAGES_AR.NO_PHONE };
+      }
+
+      // Get active WhatsApp account
+      const accounts = await db.getAll<WhatsAppAccount>("whatsappAccounts");
+      const activeAccount = accounts.find(
+        (a) => a.isActive && a.status === "connected"
+      );
+
+      if (!activeAccount) {
+        return { success: false, message: ERROR_MESSAGES_AR.NO_ACTIVE_ACCOUNT };
+      }
+
+      const message = `مرحباً ${
+        (customer as any).name
+      }،\n\nتذكير بموعد دفع القسط المستحق.\nيرجى التواصل معنا لإتمام الدفع.\n\nشكراً لتعاملكم معنا 🙏`;
+
+      await this.sendMessage(
+        activeAccount.id,
+        (customer as any).phone,
+        message,
+        undefined,
+        {
+          customerId,
+          type: "reminder",
+        }
+      );
+
+      return { success: true, message: "✅ تم إرسال التذكير بنجاح" };
+    } catch (error: any) {
+      console.error("❌ [WhatsApp] Failed to send reminder:", error);
+      return { success: false, message: getArabicError(error) };
+    }
   }
 
-  async sendInvoiceWhatsApp(invoiceId: string, pdfUrl: string): Promise<void> {
-    const invoice = await db.get("invoices", invoiceId);
-    if (!invoice) return;
-
-    const customer = await db.get("customers", (invoice as any).customerId);
-    if (!customer) return;
-
-    const accounts = await db.getAll<WhatsAppAccount>("whatsappAccounts");
-    const activeAccount = accounts.find(
-      (a) => a.isActive && a.status === "connected"
-    );
-
-    if (!activeAccount) throw new Error("No active WhatsApp account");
-
-    const message = `فاتورة رقم: ${(invoice as any).id}\nالمبلغ الإجمالي: ${
-      (invoice as any).total
-    }\nشكراً لتعاملكم معنا 🙏`;
-
-    await this.sendMessage(
-      activeAccount.id,
-      (customer as any).phone,
-      message,
-      {
-        type: "document",
-        url: pdfUrl,
-        filename: `invoice_${(invoice as any).id}.pdf`,
-      },
-      {
-        invoiceId,
-        customerId: (customer as any).id,
-        type: "invoice",
+  async sendInvoiceWhatsApp(
+    invoiceId: string,
+    pdfUrl: string
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const invoice = await db.get("invoices", invoiceId);
+      if (!invoice) {
+        return { success: false, message: ERROR_MESSAGES_AR.INVOICE_NOT_FOUND };
       }
-    );
+
+      const customer = await db.get("customers", (invoice as any).customerId);
+      if (!customer) {
+        return {
+          success: false,
+          message: ERROR_MESSAGES_AR.CUSTOMER_NOT_FOUND,
+        };
+      }
+
+      if (!(customer as any).phone) {
+        return { success: false, message: ERROR_MESSAGES_AR.NO_PHONE };
+      }
+
+      const accounts = await db.getAll<WhatsAppAccount>("whatsappAccounts");
+      const activeAccount = accounts.find(
+        (a) => a.isActive && a.status === "connected"
+      );
+
+      if (!activeAccount) {
+        return { success: false, message: ERROR_MESSAGES_AR.NO_ACTIVE_ACCOUNT };
+      }
+
+      const message = `فاتورة رقم: ${(invoice as any).id}\nالمبلغ الإجمالي: ${
+        (invoice as any).total
+      }\nشكراً لتعاملكم معنا 🙏`;
+
+      await this.sendMessage(
+        activeAccount.id,
+        (customer as any).phone,
+        message,
+        {
+          type: "document",
+          url: pdfUrl,
+          filename: `invoice_${(invoice as any).id}.pdf`,
+        },
+        {
+          invoiceId,
+          customerId: (customer as any).id,
+          type: "invoice",
+        }
+      );
+
+      return { success: true, message: "✅ تم إرسال الفاتورة بنجاح" };
+    } catch (error: any) {
+      console.error("❌ [WhatsApp] Failed to send invoice:", error);
+      return { success: false, message: getArabicError(error) };
+    }
   }
 
   // Task Management
