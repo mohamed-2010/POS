@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { InvoicePrint } from "@/components/InvoicePrint";
+import { InvoicePrint } from "@/components/common/InvoicePrint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";

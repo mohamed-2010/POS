@@ -1,6 +1,6 @@
 import React, { useState, useEffect, ReactNode } from "react";
 import { Loader2, Shield, AlertTriangle } from "lucide-react";
-import LicenseActivation from "@/pages/LicenseActivation";
+import LicenseActivation from "@/pages/settings/LicenseActivation";
 
 interface LicenseGuardProps {
   children: ReactNode;

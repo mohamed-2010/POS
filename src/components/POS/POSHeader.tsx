@@ -44,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { db, Shift } from "@/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
-import { ZReportDialog } from "@/components/ZReportDialog";
+import { ZReportDialog } from "@/components/dialogs/ZReportDialog";
 import { useShift } from "@/contexts/ShiftContext";
 
 export const POSHeader = () => {
@@ -154,7 +154,9 @@ export const POSHeader = () => {
 
     try {
       // استخدام الدوال الموحدة من calculationService
-      const { calculateShiftSales, calculateExpectedCash } = await import('@/lib/calculationService');
+      const { calculateShiftSales, calculateExpectedCash } = await import(
+        "@/lib/calculationService"
+      );
 
       const sales = await calculateShiftSales(currentShift.id);
       const cashSummary = await calculateExpectedCash(currentShift.id);
@@ -215,7 +217,8 @@ export const POSHeader = () => {
       if (!isShiftOwner && !hasClosePermission) {
         toast({
           title: "تنبيه",
-          description: "لديك وردية مفتوحة لموظف آخر. يرجى الاتصال بالمدير لإغلاقها.",
+          description:
+            "لديك وردية مفتوحة لموظف آخر. يرجى الاتصال بالمدير لإغلاقها.",
           variant: "destructive",
         });
         return;
@@ -231,14 +234,16 @@ export const POSHeader = () => {
   const loadDailySummary = async () => {
     try {
       // استخدام الدالة الموحدة من calculationService
-      const { calculateDailySummary } = await import('@/lib/calculationService');
+      const { calculateDailySummary } = await import(
+        "@/lib/calculationService"
+      );
 
       const summary = await calculateDailySummary();
 
       setDailySummary(summary);
       setDailySummaryDialogOpen(true);
     } catch (error) {
-      console.error('Error loading daily summary:', error);
+      console.error("Error loading daily summary:", error);
       toast({
         title: "خطأ",
         description: "حدث خطأ أثناء تحميل الملخص اليومي",
@@ -255,19 +260,19 @@ export const POSHeader = () => {
           name: "نقطة البيع",
           icon: ShoppingCart,
           path: "/",
-          check: () => can("invoices", "create") || can("invoices", "view")
+          check: () => can("invoices", "create") || can("invoices", "view"),
         },
         {
           name: "العملاء",
           icon: Users,
           path: "/customers",
-          check: () => can("customers", "view")
+          check: () => can("customers", "view"),
         },
         {
           name: "التقارير",
           icon: FileText,
           path: "/reports",
-          check: () => can("reports", "view")
+          check: () => can("reports", "view"),
         },
       ],
     },
@@ -278,61 +283,61 @@ export const POSHeader = () => {
           name: "المخزون",
           icon: ShoppingCart,
           path: "/inventory",
-          check: () => can("products", "view")
+          check: () => can("products", "view"),
         },
         {
           name: "أقسام المنتجات",
           icon: FolderOpen,
           path: "/product-categories",
-          check: () => can("products", "view")
+          check: () => can("products", "view"),
         },
         {
           name: "الموردين",
           icon: Users,
           path: "/suppliers",
-          check: () => can("suppliers", "view")
+          check: () => can("suppliers", "view"),
         },
         {
           name: "المشتريات",
           icon: ShoppingCart,
           path: "/purchases",
-          check: () => can("purchases", "view")
+          check: () => can("purchases", "view"),
         },
         {
           name: "الموظفين",
           icon: Users,
           path: "/employees",
-          check: () => can("employees", "view")
+          check: () => can("employees", "view"),
         },
         {
           name: "سُلف الموظفين",
           icon: FileText,
           path: "/employee-advances",
-          check: () => can("employeeAdvances", "view")
+          check: () => can("employeeAdvances", "view"),
         },
         {
           name: "خصومات الموظفين",
           icon: FileText,
           path: "/employee-deductions",
-          check: () => can("employeeAdvances", "view") // using same permission
+          check: () => can("employeeAdvances", "view"), // using same permission
         },
         {
           name: "العروض والخصومات",
           icon: FileText,
           path: "/promotions",
-          check: () => can("promotions", "view")
+          check: () => can("promotions", "view"),
         },
         {
           name: "إدارة التقسيط",
           icon: FileText,
           path: "/installments",
-          check: () => can("installments", "view")
+          check: () => can("installments", "view"),
         },
         {
           name: "إدارة الآجل",
           icon: FileText,
           path: "/credit",
-          check: () => can("credit", "view")
+          check: () => can("credit", "view"),
         },
       ],
     },
@@ -343,25 +348,25 @@ export const POSHeader = () => {
           name: "مصادر الإيداعات",
           icon: FileText,
           path: "/deposit-sources",
-          check: () => can("depositSources", "view")
+          check: () => can("depositSources", "view"),
         },
         {
           name: "الإيداعات",
           icon: FileText,
           path: "/deposits",
-          check: () => can("deposits", "view")
+          check: () => can("deposits", "view"),
         },
         {
           name: "فئات المصروفات",
           icon: FileText,
           path: "/expense-categories",
-          check: () => can("expenseCategories", "view")
+          check: () => can("expenseCategories", "view"),
         },
         {
           name: "المصروفات",
           icon: FileText,
           path: "/expenses",
-          check: () => can("expenses", "view")
+          check: () => can("expenses", "view"),
         },
       ],
     },
@@ -372,19 +377,19 @@ export const POSHeader = () => {
           name: "إدارة الورديات",
           icon: ShoppingCart,
           path: "/shifts",
-          check: () => can("shifts", "view")
+          check: () => can("shifts", "view"),
         },
         {
           name: "مرتجع المبيعات",
           icon: FileText,
           path: "/sales-returns",
-          check: () => can("returns", "view")
+          check: () => can("returns", "view"),
         },
         {
           name: "مرتجع المشتريات",
           icon: FileText,
           path: "/purchase-returns",
-          check: () => can("returns", "view")
+          check: () => can("returns", "view"),
         },
       ],
     },
@@ -395,7 +400,7 @@ export const POSHeader = () => {
           name: "الصالات والطاولات",
           icon: ShoppingCart,
           path: "/restaurant",
-          check: () => can("restaurant", "view")
+          check: () => can("restaurant", "view"),
         },
       ],
     },
@@ -406,13 +411,13 @@ export const POSHeader = () => {
           name: "إدارة الحسابات",
           icon: MessageSquare,
           path: "/whatsapp-management",
-          check: () => can("settings", "view") // WhatsApp management requires settings permission
+          check: () => can("settings", "view"), // WhatsApp management requires settings permission
         },
         {
           name: "الحملات التسويقية",
           icon: Send,
           path: "/whatsapp-campaigns",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
       ],
     },
@@ -423,25 +428,25 @@ export const POSHeader = () => {
           name: "وحدات القياس",
           icon: Ruler,
           path: "/units",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
         {
           name: "أنواع التسعير",
           icon: DollarSign,
           path: "/price-types",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
         {
           name: "طرق الدفع",
           icon: CreditCard,
           path: "/payment-methods",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
         {
           name: "إعدادات الطابعة",
           icon: Printer,
           path: "/printer-settings",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
       ],
     },
@@ -452,13 +457,13 @@ export const POSHeader = () => {
           name: "الإعدادات",
           icon: ShoppingCart,
           path: "/settings",
-          check: () => can("settings", "view")
+          check: () => can("settings", "view"),
         },
         {
           name: "الأدوار والصلاحيات",
           icon: Shield,
           path: "/roles-permissions",
-          check: () => can("settings", "edit") // Only admins should manage roles
+          check: () => can("settings", "edit"), // Only admins should manage roles
         },
       ],
     },
@@ -554,10 +559,10 @@ export const POSHeader = () => {
                     {user?.role === "admin"
                       ? "مدير النظام"
                       : user?.role === "manager"
-                        ? "مدير"
-                        : user?.role === "cashier"
-                          ? "كاشير"
-                          : "محاسب"}
+                      ? "مدير"
+                      : user?.role === "cashier"
+                      ? "كاشير"
+                      : "محاسب"}
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -586,8 +591,8 @@ export const POSHeader = () => {
           <div className="space-y-6 py-4">
             {menuItems.map((section, idx) => {
               // Filter items based on permissions
-              const visibleItems = section.items.filter(item =>
-                !item.check || item.check()
+              const visibleItems = section.items.filter(
+                (item) => !item.check || item.check()
               );
 
               // Don't show section if no items are visible
@@ -789,19 +794,21 @@ export const POSHeader = () => {
 
               {/* Net Profit */}
               <div
-                className={`border-2 rounded-lg p-4 ${dailySummary.netProfit >= 0
-                  ? "bg-emerald-50 border-emerald-400"
-                  : "bg-red-50 border-red-400"
-                  }`}
+                className={`border-2 rounded-lg p-4 ${
+                  dailySummary.netProfit >= 0
+                    ? "bg-emerald-50 border-emerald-400"
+                    : "bg-red-50 border-red-400"
+                }`}
               >
                 <h3 className="font-semibold mb-2 text-center">
                   {dailySummary.netProfit >= 0 ? "✅ صافي الربح" : "⚠️ الخسارة"}
                 </h3>
                 <p
-                  className={`text-3xl font-bold text-center ${dailySummary.netProfit >= 0
-                    ? "text-emerald-600"
-                    : "text-red-600"
-                    }`}
+                  className={`text-3xl font-bold text-center ${
+                    dailySummary.netProfit >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600"
+                  }`}
                 >
                   {dailySummary.netProfit.toFixed(2)} جنيه
                 </p>

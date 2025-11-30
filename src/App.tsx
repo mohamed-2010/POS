@@ -17,40 +17,60 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { ShiftProvider } from "@/contexts/ShiftContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AppProvider } from "@/contexts/AppContext";
-import LicenseGuard from "@/components/LicenseGuard";
-import Index from "./pages/Index";
-import POSv2 from "./pages/POSv2";
-import Customers from "./pages/Customers";
-import Reports from "./pages/ReportsNew";
-import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
-import Suppliers from "./pages/Suppliers";
-import Inventory from "./pages/Inventory";
-import Employees from "./pages/Employees";
-import EmployeeAdvances from "./pages/EmployeeAdvances";
-import EmployeeDeductions from "./pages/EmployeeDeductions";
-import ProductCategories from "./pages/ProductCategories";
-import Restaurant from "./pages/Restaurant";
-import Promotions from "./pages/Promotions";
-import Settings from "./pages/Settings";
-import Installments from "./pages/Installments";
-import Credit from "./pages/Credit";
-import Shifts from "./pages/Shifts";
-import SalesReturns from "./pages/SalesReturns";
-import PurchaseReturns from "./pages/PurchaseReturns";
-import Purchases from "./pages/Purchases";
-import RolesPermissions from "./pages/RolesPermissions";
-import DepositSources from "./pages/DepositSources";
-import Deposits from "./pages/Deposits";
-import ExpenseCategories from "./pages/ExpenseCategories";
-import Expenses from "./pages/Expenses";
-import WhatsAppManagement from "./pages/WhatsAppManagement";
-import WhatsAppCampaigns from "./pages/WhatsAppCampaigns";
-import Units from "./pages/Units";
-import PriceTypes from "./pages/PriceTypes";
-import PaymentMethods from "./pages/PaymentMethods";
-import PrinterSettings from "./pages/PrinterSettings";
-import LicenseActivation from "./pages/LicenseActivation";
+import LicenseGuard from "@/components/license/LicenseGuard";
+
+// POS Pages
+import Index from "./pages/pos/Index";
+import POSv2 from "./pages/pos/POSv2";
+import Restaurant from "./pages/pos/Restaurant";
+
+// Auth Pages
+import Login from "./pages/auth/Login";
+import NotFound from "./pages/auth/NotFound";
+
+// Sales Pages
+import Customers from "./pages/sales/Customers";
+import SalesReturns from "./pages/sales/SalesReturns";
+import Promotions from "./pages/sales/Promotions";
+
+// Purchases Pages
+import Suppliers from "./pages/purchases/Suppliers";
+import Purchases from "./pages/purchases/Purchases";
+import PurchaseReturns from "./pages/purchases/PurchaseReturns";
+
+// Inventory Pages
+import Inventory from "./pages/inventory/Inventory";
+import ProductCategories from "./pages/inventory/ProductCategories";
+import Units from "./pages/inventory/Units";
+import PriceTypes from "./pages/inventory/PriceTypes";
+
+// Employees Pages
+import Employees from "./pages/employees/Employees";
+import EmployeeAdvances from "./pages/employees/EmployeeAdvances";
+import EmployeeDeductions from "./pages/employees/EmployeeDeductions";
+
+// Finance Pages
+import Expenses from "./pages/finance/Expenses";
+import ExpenseCategories from "./pages/finance/ExpenseCategories";
+import Deposits from "./pages/finance/Deposits";
+import DepositSources from "./pages/finance/DepositSources";
+import Installments from "./pages/finance/Installments";
+import Credit from "./pages/finance/Credit";
+import PaymentMethods from "./pages/finance/PaymentMethods";
+
+// Reports Pages
+import Reports from "./pages/reports/ReportsNew";
+import Shifts from "./pages/reports/Shifts";
+
+// WhatsApp Pages
+import WhatsAppManagement from "./pages/whatsapp/WhatsAppManagement";
+import WhatsAppCampaigns from "./pages/whatsapp/WhatsAppCampaigns";
+
+// Settings Pages
+import Settings from "./pages/settings/Settings";
+import RolesPermissions from "./pages/settings/RolesPermissions";
+import PrinterSettings from "./pages/settings/PrinterSettings";
+import LicenseActivation from "./pages/settings/LicenseActivation";
 
 const queryClient = new QueryClient();
 

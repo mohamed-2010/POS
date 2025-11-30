@@ -23,7 +23,7 @@ const ALGORITHM = "aes-256-gcm";
 // غيّر هذا لعنوان السيرفر الخاص بك
 const LICENSE_SERVER_URL = "https://your-license-server.com/api/license";
 // أو استخدم Google Sheets / Firebase / Supabase كـ backend مجاني
-const USE_ONLINE_VALIDATION = true; // فعّل هذا عندما يكون السيرفر جاهز
+const USE_ONLINE_VALIDATION = false; // فعّل هذا عندما يكون السيرفر جاهز
 
 // ==================== Interfaces ====================
 

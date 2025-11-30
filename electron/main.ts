@@ -2,9 +2,12 @@ import { app, BrowserWindow, ipcMain, Menu, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
-import "./crypto-polyfill.js"; // Must be imported BEFORE whatsappHandler
-import { registerWhatsAppHandlers } from "./whatsappHandler.js";
-import { registerLicenseHandlers, verifyLicense } from "./licenseManager.js";
+import "./utils/crypto-polyfill.js"; // Must be imported BEFORE whatsappHandler
+import { registerWhatsAppHandlers } from "./handlers/whatsappHandler.js";
+import {
+  registerLicenseHandlers,
+  verifyLicense,
+} from "./handlers/licenseManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ExportButtons } from "@/components/ExportButtons";
+import { ExportButtons } from "@/components/common/ExportButtons";
 import {
   Select,
   SelectContent,
@@ -80,7 +80,10 @@ const Reports = () => {
   const { theme } = useTheme();
 
   // الحصول على ألوان الرسوم البيانية ديناميكياً
-  const chartColors = getChartColors('green', (theme as 'light' | 'dark') || 'light');
+  const chartColors = getChartColors(
+    "green",
+    (theme as "light" | "dark") || "light"
+  );
 
   // States للبيانات
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -632,8 +635,9 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <div
-                className={`text-2xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
+                className={`text-2xl font-bold ${
+                  netProfit >= 0 ? "text-green-600" : "text-red-600"
+                }`}
               >
                 {formatCurrency(netProfit)}
               </div>
@@ -953,8 +957,8 @@ const Reports = () => {
                       inv.paymentStatus === "paid"
                         ? "مدفوعة"
                         : inv.paymentStatus === "partial"
-                          ? "جزئي"
-                          : "غير مدفوعة",
+                        ? "جزئي"
+                        : "غير مدفوعة",
                   }))}
                   columns={[
                     { header: "رقم الفاتورة", dataKey: "id" },
@@ -1001,15 +1005,15 @@ const Reports = () => {
                               invoice.paymentStatus === "paid"
                                 ? "default"
                                 : invoice.paymentStatus === "partial"
-                                  ? "secondary"
-                                  : "destructive"
+                                ? "secondary"
+                                : "destructive"
                             }
                           >
                             {invoice.paymentStatus === "paid"
                               ? "مدفوعة"
                               : invoice.paymentStatus === "partial"
-                                ? "جزئي"
-                                : "غير مدفوعة"}
+                              ? "جزئي"
+                              : "غير مدفوعة"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-bold">
