@@ -7,7 +7,7 @@ graph TB
     subgraph "Root"
         ROOT[masr-pos/]
     end
-    
+
     subgraph "Main Folders"
         ELECTRON[electron/]
         SRC[src/]
@@ -15,7 +15,7 @@ graph TB
         DOCS[docs/]
         SCRIPTS[scripts/]
     end
-    
+
     ROOT --> ELECTRON
     ROOT --> SRC
     ROOT --> SUPA
@@ -456,7 +456,7 @@ graph TB
         INFRA --> SHARED
         CORE --> SHARED
     end
-    
+
     subgraph "Not Allowed"
         CORE -.-x PRES
         CORE -.-x INFRA
@@ -464,7 +464,7 @@ graph TB
         SHARED -.-x INFRA
         SHARED -.-x CORE
     end
-    
+
     style CORE fill:#e1f5fe
     style PRES fill:#f3e5f5
     style INFRA fill:#fff3e0

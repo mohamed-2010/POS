@@ -8,13 +8,13 @@ erDiagram
     FEATURES ||--o{ PLAN_FEATURES : "included in"
     PLANS ||--o{ PLAN_FEATURES : "has"
     PLANS ||--o{ SUBSCRIPTIONS : "used by"
-    
+
     CLIENTS ||--o{ SUBSCRIPTIONS : "has"
     CLIENTS ||--o{ BRANCHES : "has"
     CLIENTS ||--o{ DEVICES : "has"
     CLIENTS ||--o{ PAYMENTS : "makes"
     CLIENTS ||--o{ CLIENT_COMMUNICATIONS : "receives"
-    
+
     %% Client Data Tables
     BRANCHES ||--o{ CLIENT_USERS : "has"
     BRANCHES ||--o{ CATEGORIES : "has"
@@ -24,20 +24,20 @@ erDiagram
     BRANCHES ||--o{ INVOICES : "has"
     BRANCHES ||--o{ SHIFTS : "has"
     BRANCHES ||--o{ EXPENSES : "has"
-    
+
     CLIENT_USERS ||--o{ USER_BRANCH_ACCESS : "has access"
     BRANCHES ||--o{ USER_BRANCH_ACCESS : "accessible by"
-    
+
     CATEGORIES ||--o{ PRODUCTS : "contains"
     PRODUCTS ||--o{ INVENTORY : "tracked in"
     PRODUCTS ||--o{ INVOICE_ITEMS : "sold in"
-    
+
     CUSTOMERS ||--o{ INVOICES : "purchases"
     CLIENT_USERS ||--o{ INVOICES : "creates"
     INVOICES ||--o{ INVOICE_ITEMS : "contains"
-    
+
     CLIENT_USERS ||--o{ SHIFTS : "works"
-    
+
     %% Sync Tables
     CLIENTS ||--o{ SYNC_LOG : "has"
     CLIENTS ||--o{ SYNC_QUEUE : "has"
@@ -50,7 +50,7 @@ erDiagram
         string category
         boolean is_active
     }
-    
+
     PLANS {
         uuid id PK
         string name_ar
@@ -63,7 +63,7 @@ erDiagram
         int trial_days
         boolean is_active
     }
-    
+
     PLAN_FEATURES {
         uuid id PK
         uuid plan_id FK
@@ -71,7 +71,7 @@ erDiagram
         boolean is_enabled
         jsonb limits
     }
-    
+
     CLIENTS {
         uuid id PK
         string name_ar
@@ -81,7 +81,7 @@ erDiagram
         string sync_mode
         string status
     }
-    
+
     SUBSCRIPTIONS {
         uuid id PK
         uuid client_id FK
@@ -92,7 +92,7 @@ erDiagram
         string billing_cycle
         decimal amount
     }
-    
+
     BRANCHES {
         uuid id PK
         uuid client_id FK
@@ -100,7 +100,7 @@ erDiagram
         boolean is_main
         boolean is_active
     }
-    
+
     CLIENT_USERS {
         uuid id PK
         uuid client_id FK
@@ -109,7 +109,7 @@ erDiagram
         string role
         string pin_code
     }
-    
+
     PRODUCTS {
         uuid id PK
         uuid client_id FK
@@ -120,7 +120,7 @@ erDiagram
         decimal cost_price
         decimal sell_price
     }
-    
+
     INVOICES {
         uuid id PK
         uuid client_id FK
@@ -137,6 +137,7 @@ erDiagram
 ## Admin Tables Schema
 
 ### features (الميزات)
+
 ```mermaid
 classDiagram
     class features {
@@ -170,6 +171,7 @@ classDiagram
 ---
 
 ### plans (الباقات)
+
 ```mermaid
 classDiagram
     class plans {
@@ -196,6 +198,7 @@ classDiagram
 ---
 
 ### clients (العملاء)
+
 ```mermaid
 classDiagram
     class clients {
@@ -218,15 +221,18 @@ classDiagram
 ```
 
 **branches_mode values:**
+
 - `independent` - كل فرع مستقل
 - `shared` - فروع مرتبطة (منتجات مشتركة)
 
 **sync_mode values:**
+
 - `auto` - مزامنة تلقائية
 - `manual` - مزامنة يدوية
 - `semi-auto` - إشعار للمستخدم
 
 **status values:**
+
 - `pending` - في انتظار التفعيل
 - `active` - نشط
 - `suspended` - معلق
@@ -235,6 +241,7 @@ classDiagram
 ---
 
 ### subscriptions (الاشتراكات)
+
 ```mermaid
 classDiagram
     class subscriptions {
@@ -258,6 +265,7 @@ classDiagram
 ```
 
 **status values:**
+
 - `trial` - فترة تجريبية
 - `active` - نشط
 - `expired` - منتهي
@@ -267,6 +275,7 @@ classDiagram
 ---
 
 ### devices (الأجهزة)
+
 ```mermaid
 classDiagram
     class devices {
@@ -289,6 +298,7 @@ classDiagram
 ```
 
 **Device Approval Flow:**
+
 ```mermaid
 stateDiagram-v2
     [*] --> pending: تسجيل جديد
@@ -307,6 +317,7 @@ stateDiagram-v2
 ## Client Data Tables
 
 ### Syncable Entity Pattern
+
 كل جدول بيانات العميل يتبع هذا النمط:
 
 ```mermaid
@@ -326,6 +337,7 @@ classDiagram
 ```
 
 **sync_status values:**
+
 - `synced` - متزامن
 - `pending` - في انتظار المزامنة
 - `conflict` - يوجد تعارض
@@ -333,6 +345,7 @@ classDiagram
 ---
 
 ### products (المنتجات)
+
 ```mermaid
 classDiagram
     class products {
@@ -364,6 +377,7 @@ classDiagram
 ---
 
 ### invoices (الفواتير)
+
 ```mermaid
 classDiagram
     class invoices {
@@ -390,7 +404,7 @@ classDiagram
         +timestamptz local_updated_at
         +timestamptz server_updated_at
     }
-    
+
     class invoice_items {
         +uuid id PK
         +uuid invoice_id FK
@@ -403,7 +417,7 @@ classDiagram
         +decimal(10,2) total
         +uuid sync_id
     }
-    
+
     invoices "1" --> "*" invoice_items
 ```
 
@@ -440,34 +454,35 @@ flowchart TD
         REQ[API Request]
         JWT[JWT Token]
     end
-    
+
     subgraph "Supabase"
         AUTH{Auth Check}
         RLS{RLS Policy}
         DATA[(Data)]
     end
-    
+
     subgraph "Policy Check"
         CLIENT[client_id = user.client_id]
         BRANCH[branch_id IN user.branches]
         ADMIN[is_admin = true]
     end
-    
+
     REQ --> JWT
     JWT --> AUTH
     AUTH -->|Valid| RLS
     AUTH -->|Invalid| DENIED[Access Denied]
-    
+
     RLS --> CLIENT
     RLS --> BRANCH
     RLS --> ADMIN
-    
+
     CLIENT -->|Match| DATA
     BRANCH -->|Match| DATA
     ADMIN -->|Match| DATA
 ```
 
 **Example RLS Policy:**
+
 ```sql
 -- Clients can only see their own data
 CREATE POLICY "clients_isolation" ON products
@@ -478,10 +493,10 @@ CREATE POLICY "clients_isolation" ON products
 CREATE POLICY "branch_access" ON products
     FOR ALL
     USING (
-        branch_id IS NULL 
+        branch_id IS NULL
         OR branch_id IN (
-            SELECT branch_id 
-            FROM user_branch_access 
+            SELECT branch_id
+            FROM user_branch_access
             WHERE user_id = auth.uid()
         )
     );

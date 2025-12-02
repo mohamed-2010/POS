@@ -9,38 +9,38 @@ graph TB
         CLIENT[Client App]
         MOBILE[Mobile App]
     end
-    
+
     subgraph "Supabase"
         subgraph "REST API"
             POSTGREST[PostgREST]
         end
-        
+
         subgraph "Realtime"
             WS[WebSocket]
         end
-        
+
         subgraph "Auth"
             AUTH_API[Auth API]
         end
-        
+
         subgraph "Edge Functions"
             FUNC[Custom Functions]
         end
-        
+
         subgraph "Storage"
             STORAGE_API[Storage API]
         end
     end
-    
+
     ADMIN --> POSTGREST
     ADMIN --> AUTH_API
     ADMIN --> FUNC
-    
+
     CLIENT --> POSTGREST
     CLIENT --> WS
     CLIENT --> AUTH_API
     CLIENT --> STORAGE_API
-    
+
     MOBILE --> POSTGREST
     MOBILE --> WS
     MOBILE --> AUTH_API
@@ -51,24 +51,26 @@ graph TB
 ## Authentication APIs
 
 ### Sign Up
+
 ```mermaid
 sequenceDiagram
     participant APP as Application
     participant AUTH as Supabase Auth
     participant DB as Database
-    
+
     APP->>AUTH: POST /auth/v1/signup
     Note right of APP: {email, password, metadata}
-    
+
     AUTH->>AUTH: Validate credentials
     AUTH->>DB: Create user record
     AUTH->>AUTH: Send verification email
-    
+
     AUTH-->>APP: 200 OK
     Note left of AUTH: {user, session}
 ```
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com",
@@ -81,33 +83,35 @@ sequenceDiagram
 ```
 
 ### Sign In
+
 ```mermaid
 sequenceDiagram
     participant APP as Application
     participant AUTH as Supabase Auth
-    
+
     APP->>AUTH: POST /auth/v1/token?grant_type=password
     Note right of APP: {email, password}
-    
+
     AUTH->>AUTH: Validate credentials
     AUTH->>AUTH: Generate tokens
-    
+
     AUTH-->>APP: 200 OK
     Note left of AUTH: {access_token, refresh_token, user}
 ```
 
 ### Refresh Token
+
 ```mermaid
 sequenceDiagram
     participant APP as Application
     participant AUTH as Supabase Auth
-    
+
     APP->>AUTH: POST /auth/v1/token?grant_type=refresh_token
     Note right of APP: {refresh_token}
-    
+
     AUTH->>AUTH: Validate refresh token
     AUTH->>AUTH: Generate new tokens
-    
+
     AUTH-->>APP: 200 OK
     Note left of AUTH: {access_token, refresh_token}
 ```
@@ -119,6 +123,7 @@ sequenceDiagram
 ### Clients
 
 #### List Clients
+
 ```
 GET /rest/v1/clients
 ?select=*,subscriptions(*),branches(count)
@@ -128,6 +133,7 @@ GET /rest/v1/clients
 ```
 
 #### Get Client Details
+
 ```
 GET /rest/v1/clients
 ?id=eq.{client_id}
@@ -139,26 +145,28 @@ GET /rest/v1/clients
 ```
 
 #### Create Client
+
 ```mermaid
 sequenceDiagram
     participant ADMIN as Admin
     participant API as API
     participant DB as Database
     participant AUTH as Auth
-    
+
     ADMIN->>API: POST /rest/v1/clients
     API->>DB: Insert client
-    
+
     API->>AUTH: Create owner user
     AUTH-->>API: User created
-    
+
     API->>DB: Create default branch
     API->>DB: Link owner to client
-    
+
     API-->>ADMIN: 201 Created
 ```
 
 **Request:**
+
 ```json
 {
   "name_ar": "محلات أحمد",
@@ -170,9 +178,11 @@ sequenceDiagram
 ```
 
 #### Update Client Status
+
 ```
 PATCH /rest/v1/clients?id=eq.{client_id}
 ```
+
 ```json
 {
   "status": "suspended"
@@ -184,6 +194,7 @@ PATCH /rest/v1/clients?id=eq.{client_id}
 ### Plans
 
 #### List Plans
+
 ```
 GET /rest/v1/plans
 ?select=*,plan_features(features(*))
@@ -192,9 +203,11 @@ GET /rest/v1/plans
 ```
 
 #### Create Plan
+
 ```
 POST /rest/v1/plans
 ```
+
 ```json
 {
   "name_ar": "الباقة الأساسية",
@@ -209,19 +222,20 @@ POST /rest/v1/plans
 ```
 
 #### Update Plan Features
+
 ```mermaid
 sequenceDiagram
     participant ADMIN as Admin
     participant API as API
     participant DB as Database
-    
+
     ADMIN->>API: DELETE /rest/v1/plan_features?plan_id=eq.{id}
     API->>DB: Remove old features
-    
+
     ADMIN->>API: POST /rest/v1/plan_features
     Note right of ADMIN: Array of features
     API->>DB: Insert new features
-    
+
     API-->>ADMIN: 201 Created
 ```
 
@@ -230,9 +244,11 @@ sequenceDiagram
 ### Subscriptions
 
 #### Create Subscription
+
 ```
 POST /rest/v1/subscriptions
 ```
+
 ```json
 {
   "client_id": "uuid",
@@ -245,20 +261,21 @@ POST /rest/v1/subscriptions
 ```
 
 #### Activate Subscription
+
 ```mermaid
 sequenceDiagram
     participant ADMIN as Admin
     participant FUNC as Edge Function
     participant DB as Database
     participant NOTIF as Notifications
-    
+
     ADMIN->>FUNC: POST /functions/v1/activate-subscription
     Note right of ADMIN: {subscription_id, payment_info}
-    
+
     FUNC->>DB: Update subscription status
     FUNC->>DB: Record payment
     FUNC->>NOTIF: Send confirmation
-    
+
     FUNC-->>ADMIN: 200 OK
 ```
 
@@ -267,6 +284,7 @@ sequenceDiagram
 ### Devices
 
 #### List Pending Devices
+
 ```
 GET /rest/v1/devices
 ?status=eq.pending
@@ -275,9 +293,11 @@ GET /rest/v1/devices
 ```
 
 #### Approve Device
+
 ```
 PATCH /rest/v1/devices?id=eq.{device_id}
 ```
+
 ```json
 {
   "status": "approved",
@@ -293,6 +313,7 @@ PATCH /rest/v1/devices?id=eq.{device_id}
 ### Products
 
 #### List Products (with sync)
+
 ```
 GET /rest/v1/products
 ?client_id=eq.{client_id}
@@ -303,17 +324,18 @@ GET /rest/v1/products
 ```
 
 #### Upsert Product (sync)
+
 ```mermaid
 sequenceDiagram
     participant APP as Client App
     participant API as API
     participant DB as Database
-    
+
     APP->>API: POST /rest/v1/products
     Note right of APP: {upsert: true, on_conflict: sync_id}
-    
+
     API->>DB: Check existing by sync_id
-    
+
     alt New record
         DB->>DB: Insert
     else Existing record
@@ -324,11 +346,12 @@ sequenceDiagram
             Note over DB: Keep server version
         end
     end
-    
+
     API-->>APP: 200/201
 ```
 
 **Request:**
+
 ```json
 {
   "sync_id": "uuid",
@@ -347,26 +370,28 @@ sequenceDiagram
 ### Invoices
 
 #### Create Invoice (with items)
+
 ```mermaid
 sequenceDiagram
     participant APP as Client App
     participant FUNC as Edge Function
     participant DB as Database
-    
+
     APP->>FUNC: POST /functions/v1/create-invoice
     Note right of APP: {invoice, items[]}
-    
+
     FUNC->>DB: Begin transaction
     FUNC->>DB: Insert invoice
     FUNC->>DB: Insert invoice_items
     FUNC->>DB: Update inventory
     FUNC->>DB: Commit transaction
-    
+
     FUNC-->>APP: 201 Created
     Note left of FUNC: {invoice_id, invoice_number}
 ```
 
 **Request:**
+
 ```json
 {
   "invoice": {
@@ -394,6 +419,7 @@ sequenceDiagram
 ```
 
 #### Get Invoices (paginated)
+
 ```
 GET /rest/v1/invoices
 ?client_id=eq.{client_id}
@@ -411,25 +437,27 @@ GET /rest/v1/invoices
 ### Sync APIs
 
 #### Push Changes (Batch)
+
 ```mermaid
 sequenceDiagram
     participant APP as Client App
     participant FUNC as Edge Function
     participant DB as Database
-    
+
     APP->>FUNC: POST /functions/v1/sync-push
     Note right of APP: {changes: [{table, operation, data}]}
-    
+
     loop Each change
         FUNC->>DB: Apply change
         FUNC->>FUNC: Check conflicts
     end
-    
+
     FUNC-->>APP: 200 OK
     Note left of FUNC: {results: [{sync_id, status, server_updated_at}]}
 ```
 
 **Request:**
+
 ```json
 {
   "device_id": "uuid",
@@ -454,6 +482,7 @@ sequenceDiagram
 ```
 
 **Response:**
+
 ```json
 {
   "results": [
@@ -472,9 +501,11 @@ sequenceDiagram
 ```
 
 #### Pull Changes
+
 ```
 GET /rest/v1/rpc/sync_pull
 ```
+
 ```json
 {
   "client_id": "uuid",
@@ -485,6 +516,7 @@ GET /rest/v1/rpc/sync_pull
 ```
 
 **Response:**
+
 ```json
 {
   "products": [
@@ -501,43 +533,45 @@ GET /rest/v1/rpc/sync_pull
 ## Realtime Subscriptions
 
 ### Subscribe to Changes
+
 ```mermaid
 sequenceDiagram
     participant APP as Client App
     participant WS as WebSocket
     participant DB as Database
-    
+
     APP->>WS: Subscribe to products
     Note right of APP: channel: products:{client_id}
-    
+
     WS-->>APP: Subscription confirmed
-    
+
     Note over DB: Another device updates product
-    
+
     DB->>WS: Broadcast change
     WS->>APP: New change event
     Note left of WS: {type: UPDATE, record: {...}}
-    
+
     APP->>APP: Apply change locally
 ```
 
 **JavaScript Example:**
+
 ```javascript
 const channel = supabase
-  .channel('products-changes')
+  .channel("products-changes")
   .on(
-    'postgres_changes',
+    "postgres_changes",
     {
-      event: '*',
-      schema: 'public',
-      table: 'products',
-      filter: `client_id=eq.${clientId}`
+      event: "*",
+      schema: "public",
+      table: "products",
+      filter: `client_id=eq.${clientId}`,
     },
     (payload) => {
-      handleProductChange(payload)
+      handleProductChange(payload);
     }
   )
-  .subscribe()
+  .subscribe();
 ```
 
 ---
@@ -545,9 +579,11 @@ const channel = supabase
 ## Edge Functions
 
 ### Check Subscription
+
 ```
 POST /functions/v1/check-subscription
 ```
+
 ```json
 {
   "client_id": "uuid",
@@ -556,6 +592,7 @@ POST /functions/v1/check-subscription
 ```
 
 **Response:**
+
 ```json
 {
   "valid": true,
@@ -573,9 +610,11 @@ POST /functions/v1/check-subscription
 ```
 
 ### Send Notification
+
 ```
 POST /functions/v1/send-notification
 ```
+
 ```json
 {
   "client_id": "uuid",
@@ -592,6 +631,7 @@ POST /functions/v1/send-notification
 ## Error Responses
 
 ### Standard Error Format
+
 ```json
 {
   "error": {
@@ -605,33 +645,34 @@ POST /functions/v1/send-notification
 ```
 
 ### Error Codes
+
 ```mermaid
 graph LR
     subgraph "Auth Errors (4xx)"
         E401[401 Unauthorized]
         E403[403 Forbidden]
     end
-    
+
     subgraph "Business Errors"
         SUB_EXP[SUBSCRIPTION_EXPIRED]
         DEV_LIMIT[DEVICE_LIMIT_EXCEEDED]
         FEAT_LOCK[FEATURE_LOCKED]
         SYNC_CONF[SYNC_CONFLICT]
     end
-    
+
     subgraph "Server Errors (5xx)"
         E500[500 Internal Error]
         E503[503 Service Unavailable]
     end
 ```
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `UNAUTHORIZED` | 401 | Invalid or missing token |
-| `FORBIDDEN` | 403 | No permission |
-| `NOT_FOUND` | 404 | Resource not found |
-| `SUBSCRIPTION_EXPIRED` | 403 | Subscription ended |
-| `DEVICE_LIMIT_EXCEEDED` | 403 | Too many devices |
-| `FEATURE_LOCKED` | 403 | Feature not in plan |
-| `SYNC_CONFLICT` | 409 | Data conflict |
-| `VALIDATION_ERROR` | 422 | Invalid data |
+| Code                    | HTTP Status | Description              |
+| ----------------------- | ----------- | ------------------------ |
+| `UNAUTHORIZED`          | 401         | Invalid or missing token |
+| `FORBIDDEN`             | 403         | No permission            |
+| `NOT_FOUND`             | 404         | Resource not found       |
+| `SUBSCRIPTION_EXPIRED`  | 403         | Subscription ended       |
+| `DEVICE_LIMIT_EXCEEDED` | 403         | Too many devices         |
+| `FEATURE_LOCKED`        | 403         | Feature not in plan      |
+| `SYNC_CONFLICT`         | 409         | Data conflict            |
+| `VALIDATION_ERROR`      | 422         | Invalid data             |
