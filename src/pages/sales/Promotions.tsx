@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Plus, Search, Edit, Trash2, Tag, Percent } from "lucide-react";
-import { db, Promotion } from "@/lib/indexedDB";
+import { db, Promotion } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,

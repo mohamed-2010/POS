@@ -23,7 +23,7 @@ import {
   Unit,
   PriceType,
   ProductUnit,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {

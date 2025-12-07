@@ -24,7 +24,7 @@ import {
   Trash2,
   DollarSign,
 } from "lucide-react";
-import { db, Customer, Invoice } from "@/lib/indexedDB";
+import { db, Customer, Invoice } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";

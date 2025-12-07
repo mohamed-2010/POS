@@ -18,7 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { db, Invoice, InstallmentPayment, Customer } from "@/lib/indexedDB";
+import {
+  db,
+  Invoice,
+  InstallmentPayment,
+  Customer,
+} from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";

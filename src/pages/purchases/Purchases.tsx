@@ -42,7 +42,7 @@ import {
   Product,
   Unit,
   Shift,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
@@ -214,8 +214,8 @@ const Purchases = () => {
           formData.paidAmount >= total
             ? "paid"
             : formData.paidAmount > 0
-              ? "partial"
-              : "unpaid",
+            ? "partial"
+            : "unpaid",
         paidAmount: formData.paidAmount,
         remainingAmount: remaining,
         userId: user.id,
@@ -227,12 +227,12 @@ const Purchases = () => {
         installmentPlan:
           formData.paymentType === "installment"
             ? {
-              numberOfInstallments: formData.numberOfInstallments,
-              installmentAmount: formData.installmentAmount,
-              interestRate: 0,
-              startDate: new Date().toISOString(),
-              payments: [],
-            }
+                numberOfInstallments: formData.numberOfInstallments,
+                installmentAmount: formData.installmentAmount,
+                interestRate: 0,
+                startDate: new Date().toISOString(),
+                payments: [],
+              }
             : undefined,
       };
 
@@ -386,22 +386,22 @@ const Purchases = () => {
                               purchase.paymentStatus === "paid"
                                 ? "default"
                                 : purchase.paymentStatus === "partial"
-                                  ? "secondary"
-                                  : "destructive"
+                                ? "secondary"
+                                : "destructive"
                             }
                           >
                             {purchase.paymentStatus === "paid"
                               ? "مدفوعة"
                               : purchase.paymentStatus === "partial"
-                                ? "مدفوعة جزئياً"
-                                : "غير مدفوعة"}
+                              ? "مدفوعة جزئياً"
+                              : "غير مدفوعة"}
                           </Badge>
                           <Badge variant="outline">
                             {purchase.paymentType === "cash"
                               ? "نقدي"
                               : purchase.paymentType === "credit"
-                                ? "آجل"
-                                : "تقسيط"}
+                              ? "آجل"
+                              : "تقسيط"}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">

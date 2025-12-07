@@ -33,7 +33,9 @@ import {
   PaymentMethod,
   Promotion,
   ProductUnit,
-} from "@/lib/indexedDB";
+  CartItem,
+  PendingOrder,
+} from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettingsContext } from "@/contexts/SettingsContext";
@@ -64,33 +66,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-
-interface CartItem {
-  id: string;
-  name: string;
-  nameAr: string;
-  price: number;
-  stock: number;
-  quantity: number;
-  customPrice?: number;
-  priceTypeId?: string;
-  priceTypeName?: string;
-  unitId?: string;
-  unitName?: string;
-  prices?: Record<string, number>;
-  // Multi-unit support
-  productUnitId?: string; // ID of the ProductUnit record
-  conversionFactor?: number; // How many base units = 1 of this unit
-  selectedUnitName?: string; // Display name of selected unit
-}
-
-interface PendingOrder {
-  id: string;
-  items: CartItem[];
-  customerId?: string;
-  paymentType: string;
-  timestamp: string;
-}
 
 const POSv2 = () => {
   const { user, can } = useAuth();

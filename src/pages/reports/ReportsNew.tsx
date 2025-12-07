@@ -67,7 +67,7 @@ import {
   Expense,
   PaymentMethod,
   ProductCategory,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { useToast } from "@/hooks/use-toast";
 import { getChartColors } from "@/lib/theme.config";

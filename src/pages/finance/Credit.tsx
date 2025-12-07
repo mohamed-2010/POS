@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { db, Invoice, Customer } from "@/lib/indexedDB";
+import { db, Invoice, Customer } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import {
   CreditCard,

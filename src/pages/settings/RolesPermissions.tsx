@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Shield, Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, Role } from "@/lib/indexedDB";
+import { db, Role } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import {
   Dialog,

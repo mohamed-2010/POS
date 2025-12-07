@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { db } from "./lib/indexedDB";
+import { db } from "./shared/lib/indexedDB";
 
 // تهيئة قاعدة البيانات قبل بدء التطبيق
 db.init()

@@ -1,4 +1,4 @@
-import { Invoice } from "@/lib/indexedDB";
+import { Invoice } from "@/shared/lib/indexedDB";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
@@ -74,7 +74,12 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
             <Printer className="h-5 w-5" />
             طباعة
           </Button>
-          <Button onClick={onClose} variant="outline" size="lg" className="gap-2">
+          <Button
+            onClick={onClose}
+            variant="outline"
+            size="lg"
+            className="gap-2"
+          >
             <X className="h-5 w-5" />
             إغلاق
           </Button>
@@ -94,18 +99,22 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
           }}
         >
           {/* Header */}
-          <div style={{
-            textAlign: "center",
-            borderBottom: "2px solid #000",
-            paddingBottom: "8px",
-            marginBottom: "10px"
-          }}>
-            <h1 style={{
-              fontSize: "20px",
-              fontWeight: "bold",
-              margin: "0 0 5px 0",
-              color: "#000"
-            }}>
+          <div
+            style={{
+              textAlign: "center",
+              borderBottom: "2px solid #000",
+              paddingBottom: "8px",
+              marginBottom: "10px",
+            }}
+          >
+            <h1
+              style={{
+                fontSize: "20px",
+                fontWeight: "bold",
+                margin: "0 0 5px 0",
+                color: "#000",
+              }}
+            >
               {storeName}
             </h1>
             {storeAddress && (
@@ -126,54 +135,72 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
           </div>
 
           {/* Invoice Info */}
-          <div style={{
-            marginBottom: "10px",
-            fontSize: "11px",
-            borderBottom: "1px dashed #000",
-            paddingBottom: "8px"
-          }}>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "3px"
-            }}>
-              <span style={{ fontWeight: "600", color: "#000" }}>رقم الفاتورة:</span>
-              <span style={{ fontWeight: "bold", color: "#000" }}>#{invoice.id}</span>
+          <div
+            style={{
+              marginBottom: "10px",
+              fontSize: "11px",
+              borderBottom: "1px dashed #000",
+              paddingBottom: "8px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "3px",
+              }}
+            >
+              <span style={{ fontWeight: "600", color: "#000" }}>
+                رقم الفاتورة:
+              </span>
+              <span style={{ fontWeight: "bold", color: "#000" }}>
+                #{invoice.id}
+              </span>
             </div>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "3px"
-            }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "3px",
+              }}
+            >
               <span style={{ color: "#000" }}>التاريخ:</span>
               <span style={{ color: "#000" }}>
                 {new Date(invoice.createdAt).toLocaleDateString("ar-EG")}
               </span>
             </div>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "3px"
-            }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "3px",
+              }}
+            >
               <span style={{ color: "#000" }}>الوقت:</span>
               <span style={{ color: "#000" }}>
                 {new Date(invoice.createdAt).toLocaleTimeString("ar-EG")}
               </span>
             </div>
             {invoice.customerName && (
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "3px"
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "3px",
+                }}
+              >
                 <span style={{ color: "#000" }}>العميل:</span>
-                <span style={{ fontWeight: "600", color: "#000" }}>{invoice.customerName}</span>
+                <span style={{ fontWeight: "600", color: "#000" }}>
+                  {invoice.customerName}
+                </span>
               </div>
             )}
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between"
-            }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
               <span style={{ color: "#000" }}>الموظف:</span>
               <span style={{ color: "#000" }}>{invoice.userName}</span>
             </div>
@@ -181,91 +208,124 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
 
           {/* Items Table */}
           <div style={{ marginBottom: "10px" }}>
-            <table style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: "11px"
-            }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "11px",
+              }}
+            >
               <thead>
-                <tr style={{
-                  borderTop: "2px solid #000",
-                  borderBottom: "2px solid #000",
-                  backgroundColor: "#fff"
-                }}>
-                  <th style={{
-                    textAlign: "right",
-                    padding: "5px 2px",
-                    fontWeight: "bold",
-                    color: "#000"
-                  }}>الصنف</th>
-                  <th style={{
-                    textAlign: "center",
-                    padding: "5px 2px",
-                    width: "15%",
-                    fontWeight: "bold",
-                    color: "#000"
-                  }}>الكمية</th>
-                  <th style={{
-                    textAlign: "center",
-                    padding: "5px 2px",
-                    width: "25%",
-                    fontWeight: "bold",
-                    color: "#000"
-                  }}>السعر</th>
-                  <th style={{
-                    textAlign: "left",
-                    padding: "5px 2px",
-                    width: "25%",
-                    fontWeight: "bold",
-                    color: "#000"
-                  }}>الإجمالي</th>
+                <tr
+                  style={{
+                    borderTop: "2px solid #000",
+                    borderBottom: "2px solid #000",
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <th
+                    style={{
+                      textAlign: "right",
+                      padding: "5px 2px",
+                      fontWeight: "bold",
+                      color: "#000",
+                    }}
+                  >
+                    الصنف
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "center",
+                      padding: "5px 2px",
+                      width: "15%",
+                      fontWeight: "bold",
+                      color: "#000",
+                    }}
+                  >
+                    الكمية
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "center",
+                      padding: "5px 2px",
+                      width: "25%",
+                      fontWeight: "bold",
+                      color: "#000",
+                    }}
+                  >
+                    السعر
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "5px 2px",
+                      width: "25%",
+                      fontWeight: "bold",
+                      color: "#000",
+                    }}
+                  >
+                    الإجمالي
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {invoice.items.map((item, index) => (
-                  <tr key={index} style={{
-                    borderBottom: "1px dashed #ccc"
-                  }}>
-                    <td style={{
-                      padding: "5px 2px",
-                      textAlign: "right",
-                      color: "#000"
-                    }}>
+                  <tr
+                    key={index}
+                    style={{
+                      borderBottom: "1px dashed #ccc",
+                    }}
+                  >
+                    <td
+                      style={{
+                        padding: "5px 2px",
+                        textAlign: "right",
+                        color: "#000",
+                      }}
+                    >
                       <div style={{ fontWeight: "500", color: "#000" }}>
                         {item.productName}
                       </div>
                       {item.unitName && (
-                        <div style={{
-                          fontSize: "9px",
-                          color: "#666",
-                          fontStyle: "italic"
-                        }}>
+                        <div
+                          style={{
+                            fontSize: "9px",
+                            color: "#666",
+                            fontStyle: "italic",
+                          }}
+                        >
                           ({item.unitName})
                         </div>
                       )}
                     </td>
-                    <td style={{
-                      padding: "5px 2px",
-                      textAlign: "center",
-                      fontWeight: "600",
-                      color: "#000"
-                    }}>
+                    <td
+                      style={{
+                        padding: "5px 2px",
+                        textAlign: "center",
+                        fontWeight: "600",
+                        color: "#000",
+                      }}
+                    >
                       {item.quantity}
                     </td>
-                    <td style={{
-                      padding: "5px 2px",
-                      textAlign: "center",
-                      fontSize: "10px",
-                      color: "#000"
-                    }}>
+                    <td
+                      style={{
+                        padding: "5px 2px",
+                        textAlign: "center",
+                        fontSize: "10px",
+                        color: "#000",
+                      }}
+                    >
                       {item.price.toFixed(2)}
                     </td>
-                    <td style={{
-                      padding: "5px 2px",
-                      textAlign: "left",
-                      fontWeight: "bold",
-                      color: "#000"
-                    }}>
+                    <td
+                      style={{
+                        padding: "5px 2px",
+                        textAlign: "left",
+                        fontWeight: "bold",
+                        color: "#000",
+                      }}
+                    >
                       {item.total.toFixed(2)}
                     </td>
                   </tr>
@@ -275,17 +335,21 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
           </div>
 
           {/* Totals */}
-          <div style={{
-            borderTop: "2px solid #000",
-            paddingTop: "8px",
-            marginBottom: "10px"
-          }}>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "4px",
-              fontSize: "12px"
-            }}>
+          <div
+            style={{
+              borderTop: "2px solid #000",
+              paddingTop: "8px",
+              marginBottom: "10px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "4px",
+                fontSize: "12px",
+              }}
+            >
               <span style={{ color: "#000" }}>المجموع الفرعي:</span>
               <span style={{ fontWeight: "600", color: "#000" }}>
                 {invoice.subtotal.toFixed(2)} {currency}
@@ -293,12 +357,14 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
             </div>
 
             {invoice.discount > 0 && (
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "4px",
-                fontSize: "11px"
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "4px",
+                  fontSize: "11px",
+                }}
+              >
                 <span style={{ color: "#000" }}>الخصم:</span>
                 <span style={{ fontWeight: "600", color: "#000" }}>
                   - {invoice.discount.toFixed(2)} {currency}
@@ -307,12 +373,14 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
             )}
 
             {invoice.tax > 0 && (
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "4px",
-                fontSize: "11px"
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "4px",
+                  fontSize: "11px",
+                }}
+              >
                 <span style={{ color: "#000" }}>الضريبة:</span>
                 <span style={{ fontWeight: "600", color: "#000" }}>
                   {invoice.tax.toFixed(2)} {currency}
@@ -320,15 +388,17 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
               </div>
             )}
 
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: "8px",
-              paddingTop: "8px",
-              borderTop: "2px solid #000",
-              fontSize: "16px",
-              fontWeight: "bold"
-            }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginTop: "8px",
+                paddingTop: "8px",
+                borderTop: "2px solid #000",
+                fontSize: "16px",
+                fontWeight: "bold",
+              }}
+            >
               <span style={{ color: "#000" }}>الإجمالي:</span>
               <span style={{ color: "#000" }}>
                 {invoice.total.toFixed(2)} {currency}
@@ -337,28 +407,36 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
 
             {invoice.paidAmount > 0 && (
               <>
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: "6px",
-                  fontSize: "12px",
-                  paddingTop: "6px",
-                  borderTop: "1px dashed #000"
-                }}>
-                  <span style={{ fontWeight: "600", color: "#000" }}>المدفوع:</span>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "6px",
+                    fontSize: "12px",
+                    paddingTop: "6px",
+                    borderTop: "1px dashed #000",
+                  }}
+                >
+                  <span style={{ fontWeight: "600", color: "#000" }}>
+                    المدفوع:
+                  </span>
                   <span style={{ fontWeight: "bold", color: "#000" }}>
                     {invoice.paidAmount.toFixed(2)} {currency}
                   </span>
                 </div>
 
                 {invoice.remainingAmount > 0 && (
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginTop: "4px",
-                    fontSize: "12px"
-                  }}>
-                    <span style={{ fontWeight: "600", color: "#000" }}>المتبقي:</span>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "4px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <span style={{ fontWeight: "600", color: "#000" }}>
+                      المتبقي:
+                    </span>
                     <span style={{ fontWeight: "bold", color: "#000" }}>
                       {invoice.remainingAmount.toFixed(2)} {currency}
                     </span>
@@ -366,15 +444,20 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
                 )}
 
                 {invoice.paidAmount > invoice.total && (
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginTop: "4px",
-                    fontSize: "12px"
-                  }}>
-                    <span style={{ fontWeight: "600", color: "#000" }}>الباقي للعميل:</span>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "4px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <span style={{ fontWeight: "600", color: "#000" }}>
+                      الباقي للعميل:
+                    </span>
                     <span style={{ fontWeight: "bold", color: "#000" }}>
-                      {(invoice.paidAmount - invoice.total).toFixed(2)} {currency}
+                      {(invoice.paidAmount - invoice.total).toFixed(2)}{" "}
+                      {currency}
                     </span>
                   </div>
                 )}
@@ -383,61 +466,75 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
           </div>
 
           {/* Payment Status */}
-          <div style={{
-            textAlign: "center",
-            marginBottom: "10px",
-            paddingBottom: "10px",
-            borderBottom: "1px dashed #000"
-          }}>
-            <div style={{
-              display: "inline-block",
-              padding: "5px 15px",
-              border: "2px solid #000",
-              borderRadius: "5px",
-              fontSize: "12px",
-              fontWeight: "bold",
-              color: "#000"
-            }}>
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "10px",
+              paddingBottom: "10px",
+              borderBottom: "1px dashed #000",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-block",
+                padding: "5px 15px",
+                border: "2px solid #000",
+                borderRadius: "5px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                color: "#000",
+              }}
+            >
               {invoice.paymentStatus === "paid"
                 ? "مدفوعة بالكامل"
                 : invoice.paymentStatus === "partial"
-                  ? "مدفوعة جزئياً"
-                  : "غير مدفوعة"}
+                ? "مدفوعة جزئياً"
+                : "غير مدفوعة"}
             </div>
           </div>
 
           {/* Footer */}
-          <div style={{
-            textAlign: "center",
-            paddingTop: "10px",
-            borderTop: "2px solid #000",
-            fontSize: "11px"
-          }}>
-            <p style={{
-              margin: "0 0 5px 0",
-              fontWeight: "bold",
-              fontSize: "13px",
-              color: "#000"
-            }}>
+          <div
+            style={{
+              textAlign: "center",
+              paddingTop: "10px",
+              borderTop: "2px solid #000",
+              fontSize: "11px",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 5px 0",
+                fontWeight: "bold",
+                fontSize: "13px",
+                color: "#000",
+              }}
+            >
               شكراً لتعاملكم معنا
             </p>
-            <p style={{
-              margin: "0 0 5px 0",
-              fontSize: "10px",
-              color: "#000"
-            }}>
+            <p
+              style={{
+                margin: "0 0 5px 0",
+                fontSize: "10px",
+                color: "#000",
+              }}
+            >
               نتمنى أن نكون عند حسن ظنكم دائماً
             </p>
-            <div style={{
-              marginTop: "8px",
-              paddingTop: "5px",
-              borderTop: "1px dashed #000"
-            }}>
-              <p style={{
-                margin: "0",
-                fontSize: "9px",
-                color: "#666"
-              }}>
+            <div
+              style={{
+                marginTop: "8px",
+                paddingTop: "5px",
+                borderTop: "1px dashed #000",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0",
+                  fontSize: "9px",
+                  color: "#666",
+                }}
+              >
                 {new Date().toLocaleString("ar-EG")}
               </p>
             </div>
@@ -450,7 +547,12 @@ export const InvoicePrint = ({ invoice, onClose }: InvoicePrintProps) => {
             <Printer className="h-5 w-5" />
             طباعة
           </Button>
-          <Button onClick={onClose} variant="outline" size="lg" className="gap-2 px-8">
+          <Button
+            onClick={onClose}
+            variant="outline"
+            size="lg"
+            className="gap-2 px-8"
+          >
             <X className="h-5 w-5" />
             إغلاق
           </Button>

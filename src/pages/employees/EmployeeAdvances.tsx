@@ -40,7 +40,7 @@ import {
   EmployeeAdvance,
   Employee,
   EmployeeDeduction,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -469,8 +469,6 @@ const EmployeeAdvances = () => {
                   required
                 />
               </div>
-
-
 
               <div className="space-y-2">
                 <Label>ملاحظات</Label>

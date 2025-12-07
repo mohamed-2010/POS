@@ -5,7 +5,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-import { db, Shift, Employee } from "@/lib/indexedDB";
+import { db, Shift, Employee } from "@/shared/lib/indexedDB";
 import { useAuth } from "./AuthContext";
 import { hasPermission, Role } from "@/lib/permissions";
 import {

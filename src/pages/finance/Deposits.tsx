@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { db, Deposit, DepositSource } from "@/lib/indexedDB";
+import { db, Deposit, DepositSource } from "@/shared/lib/indexedDB";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,7 +124,7 @@ const Deposits = () => {
         toast({
           title: "يجب فتح وردية أولاً",
           description: "لا يمكن إضافة إيداع بدون وردية مفتوحة",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }

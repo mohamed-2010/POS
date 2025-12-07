@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Plus, Search, Edit, Trash2, Calendar, DollarSign } from "lucide-react";
-import { db, EmployeeDeduction, Employee } from "@/lib/indexedDB";
+import { db, EmployeeDeduction, Employee } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {

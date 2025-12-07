@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Plus, Search, Edit, Trash2, FolderOpen, FolderX } from "lucide-react";
-import { db, ProductCategory } from "@/lib/indexedDB";
+import { db, ProductCategory } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {

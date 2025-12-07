@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { db, Setting } from "@/lib/indexedDB";
+import { db, Setting } from "@/shared/lib/indexedDB";
 
 export function useSettings() {
   const [settings, setSettings] = useState<Setting[]>([]);

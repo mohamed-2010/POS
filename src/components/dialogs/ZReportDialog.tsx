@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { db, Shift } from "@/lib/indexedDB";
+import { db, Shift } from "@/shared/lib/indexedDB";
 import { getShiftCashSummary } from "@/lib/cashMovementService";
 import { Printer, AlertCircle, DollarSign } from "lucide-react";
 import { toast } from "sonner";

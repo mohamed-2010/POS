@@ -1,4 +1,4 @@
-import { db } from "@/lib/indexedDB";
+import { db } from "@/shared/lib/indexedDB";
 
 // Check if running in Electron
 const isElectron = () => {

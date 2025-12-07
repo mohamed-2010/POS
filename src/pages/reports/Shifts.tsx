@@ -21,7 +21,7 @@ import {
   ArrowUp,
   FileText,
 } from "lucide-react";
-import { db, Shift, Employee } from "@/lib/indexedDB";
+import { db, Shift, Employee } from "@/shared/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { useShift } from "@/contexts/ShiftContext";
 import { toast } from "sonner";
@@ -479,12 +479,12 @@ const Shifts = () => {
         />
 
         {/* حوار تقرير Z - إغلاق الوردية */}
-        <ZReportDialog
+        {/* <ZReportDialog
           open={zReportOpen}
           onOpenChange={setZReportOpen}
           shiftId={selectedShift?.id || ""}
           onConfirm={handleCloseShift}
-        />
+        /> */}
       </div>
     </div>
   );

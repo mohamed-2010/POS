@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { db, Shift } from "@/lib/indexedDB";
+import { db, Shift } from "@/shared/lib/indexedDB";
 import {
   getCashMovementsSummary,
   getShiftCashSummary,

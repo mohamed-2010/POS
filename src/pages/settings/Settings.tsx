@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/use-settings";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
-import { db } from "@/lib/indexedDB";
+import { db } from "@/shared/lib/indexedDB";
 import { useThemeContext } from "@/contexts/ThemeContext";
 import { AVAILABLE_THEMES } from "@/lib/theme.config";
 import {

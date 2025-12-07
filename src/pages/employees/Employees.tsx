@@ -19,7 +19,7 @@ import {
   EmployeeAdvance,
   EmployeeDeduction,
   Role,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -173,7 +173,12 @@ const Employees = () => {
         );
 
         if (userToUpdate) {
-          console.log("[Employees] Updating user role from", userToUpdate.role, "to", formData.role);
+          console.log(
+            "[Employees] Updating user role from",
+            userToUpdate.role,
+            "to",
+            formData.role
+          );
           userToUpdate.role = formData.role;
           userToUpdate.roleId = formData.role; // Save roleId for custom roles
           userToUpdate.name = formData.name;
@@ -223,7 +228,12 @@ const Employees = () => {
           createdAt: new Date().toISOString(),
         };
 
-        console.log("[Employees] Creating new user with role:", formData.role, "roleId:", formData.role);
+        console.log(
+          "[Employees] Creating new user with role:",
+          formData.role,
+          "roleId:",
+          formData.role
+        );
         await db.add("users", newUser);
         toast({
           title: "تم إضافة الموظف بنجاح",
@@ -868,8 +878,9 @@ const Employees = () => {
                               (r) => r.id === formData.role
                             );
                             if (selectedRole) {
-                              return `📋 ${selectedRole.description || "لا يوجد وصف"
-                                }`;
+                              return `📋 ${
+                                selectedRole.description || "لا يوجد وصف"
+                              }`;
                             }
                             return "";
                           })()}

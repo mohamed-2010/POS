@@ -26,7 +26,7 @@ import {
   Product,
   Shift,
   PaymentMethod,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Calendar, CreditCard, Wallet, Banknote } from "lucide-react";

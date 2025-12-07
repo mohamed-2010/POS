@@ -24,7 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettingsContext } from "@/contexts/SettingsContext";
-import { db, WhatsAppAccount } from "@/lib/indexedDB";
+import { db, WhatsAppAccount } from "@/shared/lib/indexedDB";
 import { whatsappService } from "@/services/whatsapp/whatsappService";
 import {
   MessageSquare,

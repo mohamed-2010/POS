@@ -20,7 +20,6 @@ import { AppProvider } from "@/contexts/AppContext";
 import LicenseGuard from "@/components/license/LicenseGuard";
 
 // POS Pages
-import Index from "./pages/pos/Index";
 import POSv2 from "./pages/pos/POSv2";
 import Restaurant from "./pages/pos/Restaurant";
 
@@ -184,14 +183,6 @@ const App = () => {
                             element={
                               <ProtectedRoute>
                                 <POSv2 />
-                              </ProtectedRoute>
-                            }
-                          />
-                          <Route
-                            path="/pos-old"
-                            element={
-                              <ProtectedRoute>
-                                <Index />
                               </ProtectedRoute>
                             }
                           />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { db, Unit } from "@/lib/indexedDB";
+import { db, Unit } from "@/shared/lib/indexedDB";
 import { Button } from "@/components/ui/button";
 import { POSHeader } from "@/components/POS/POSHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

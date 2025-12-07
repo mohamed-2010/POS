@@ -3,7 +3,7 @@ import { POSHeader } from "@/components/POS/POSHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus, Users } from "lucide-react";
-import { db, Hall, RestaurantTable } from "@/lib/indexedDB";
+import { db, Hall, RestaurantTable } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {

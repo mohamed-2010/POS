@@ -29,7 +29,7 @@ import {
   Product,
   Shift,
   Customer,
-} from "@/lib/indexedDB";
+} from "@/shared/lib/indexedDB";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
@@ -374,18 +374,19 @@ const SalesReturns = () => {
                           <FileText className="h-4 w-4" />
                           <span className="font-bold">{returnDoc.id}</span>
                           <span
-                            className={`px-2 py-1 rounded text-xs ${returnDoc.refundStatus === "completed"
+                            className={`px-2 py-1 rounded text-xs ${
+                              returnDoc.refundStatus === "completed"
                                 ? "bg-green-100 text-green-800"
                                 : returnDoc.refundStatus === "pending"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
                           >
                             {returnDoc.refundStatus === "completed"
                               ? "مكتمل"
                               : returnDoc.refundStatus === "pending"
-                                ? "قيد الانتظار"
-                                : "مرفوض"}
+                              ? "قيد الانتظار"
+                              : "مرفوض"}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground">
@@ -458,12 +459,13 @@ const SalesReturns = () => {
                         return (
                           <Card
                             key={invoice.id}
-                            className={`p-3 cursor-pointer hover:bg-muted transition-colors ${fullyReturned
+                            className={`p-3 cursor-pointer hover:bg-muted transition-colors ${
+                              fullyReturned
                                 ? "bg-red-50 dark:bg-red-950/20 border-red-200"
                                 : hasReturns
-                                  ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200"
-                                  : ""
-                              }`}
+                                ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200"
+                                : ""
+                            }`}
                             onClick={() => handleSelectInvoice(invoice)}
                           >
                             <div className="flex justify-between items-center">
@@ -500,8 +502,8 @@ const SalesReturns = () => {
                                   {invoice.paymentStatus === "paid"
                                     ? "مدفوعة"
                                     : invoice.paymentStatus === "partial"
-                                      ? "مدفوعة جزئياً"
-                                      : "غير مدفوعة"}
+                                    ? "مدفوعة جزئياً"
+                                    : "غير مدفوعة"}
                                 </p>
                               </div>
                             </div>
@@ -690,17 +692,17 @@ const SalesReturns = () => {
                                       (sum, item) => sum + item.total,
                                       0
                                     ) >=
-                                    0
+                                  0
                                     ? "text-green-600"
                                     : "text-red-600 font-bold"
                                 }
                               >
                                 {formatCurrency(
                                   customerBalance -
-                                  returnItems.reduce(
-                                    (sum, item) => sum + item.total,
-                                    0
-                                  )
+                                    returnItems.reduce(
+                                      (sum, item) => sum + item.total,
+                                      0
+                                    )
                                 )}
                               </span>
                             </p>
@@ -712,10 +714,10 @@ const SalesReturns = () => {
                               <span className="text-green-600 font-bold">
                                 {formatCurrency(
                                   customerBalance +
-                                  returnItems.reduce(
-                                    (sum, item) => sum + item.total,
-                                    0
-                                  )
+                                    returnItems.reduce(
+                                      (sum, item) => sum + item.total,
+                                      0
+                                    )
                                 )}
                               </span>
                             </p>
@@ -732,7 +734,9 @@ const SalesReturns = () => {
 
                   <div className="p-4 bg-muted rounded-md space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">المجموع الفرعي:</span>
+                      <span className="text-muted-foreground">
+                        المجموع الفرعي:
+                      </span>
                       <span className="font-semibold">
                         {formatCurrency(
                           returnItems.reduce((sum, item) => sum + item.total, 0)
@@ -740,8 +744,12 @@ const SalesReturns = () => {
                       </span>
                     </div>
                     {(() => {
-                      const subtotal = returnItems.reduce((sum, item) => sum + item.total, 0);
-                      const taxRate = parseFloat(getSetting("taxRate") || "0") / 100;
+                      const subtotal = returnItems.reduce(
+                        (sum, item) => sum + item.total,
+                        0
+                      );
+                      const taxRate =
+                        parseFloat(getSetting("taxRate") || "0") / 100;
                       const tax = subtotal * taxRate;
                       return (
                         <>
@@ -755,7 +763,9 @@ const SalesReturns = () => {
                           </div>
                           <div className="pt-2 border-t">
                             <div className="flex justify-between">
-                              <span className="text-sm font-medium">الإجمالي النهائي:</span>
+                              <span className="text-sm font-medium">
+                                الإجمالي النهائي:
+                              </span>
                               <span className="text-2xl font-bold text-red-600">
                                 {formatCurrency(subtotal + tax)}
                               </span>

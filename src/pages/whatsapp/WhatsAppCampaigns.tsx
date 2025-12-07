@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -23,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { db, WhatsAppAccount, WhatsAppCampaign } from "@/lib/indexedDB";
+import { db, WhatsAppAccount, WhatsAppCampaign } from "@/shared/lib/indexedDB";
 import { whatsappService } from "@/services/whatsapp/whatsappService";
 import {
   Megaphone,
@@ -61,7 +67,8 @@ const MESSAGE_TEMPLATES = [
     bgColor: "bg-orange-50 dark:bg-orange-950",
     borderColor: "border-orange-200 dark:border-orange-800",
     description: "ذكّر العملاء بالمبالغ المستحقة عليهم",
-    template: "السلام عليكم {{name}} 👋\n\nنحيطكم علماً بأن لديكم مبلغ مستحق قدره *{{amount}} جنيه*\n\nنرجو التكرم بسداد المبلغ في أقرب وقت ممكن.\n\nشكراً لتعاملكم معنا 🙏\n{{storeName}}",
+    template:
+      "السلام عليكم {{name}} 👋\n\nنحيطكم علماً بأن لديكم مبلغ مستحق قدره *{{amount}} جنيه*\n\nنرجو التكرم بسداد المبلغ في أقرب وقت ممكن.\n\nشكراً لتعاملكم معنا 🙏\n{{storeName}}",
     targetType: "credit",
   },
   {
@@ -72,7 +79,8 @@ const MESSAGE_TEMPLATES = [
     bgColor: "bg-blue-50 dark:bg-blue-950",
     borderColor: "border-blue-200 dark:border-blue-800",
     description: "ذكّر العملاء بموعد القسط القادم",
-    template: "مرحباً {{name}} 👋\n\nنذكركم بموعد القسط القادم بقيمة *{{installmentAmount}} جنيه*\n\nالمتبقي من إجمالي المبلغ: *{{remainingAmount}} جنيه*\n\nشكراً لثقتكم 💙\n{{storeName}}",
+    template:
+      "مرحباً {{name}} 👋\n\nنذكركم بموعد القسط القادم بقيمة *{{installmentAmount}} جنيه*\n\nالمتبقي من إجمالي المبلغ: *{{remainingAmount}} جنيه*\n\nشكراً لثقتكم 💙\n{{storeName}}",
     targetType: "installment",
   },
   {
@@ -83,7 +91,8 @@ const MESSAGE_TEMPLATES = [
     bgColor: "bg-green-50 dark:bg-green-950",
     borderColor: "border-green-200 dark:border-green-800",
     description: "أخبر العملاء بالعروض والخصومات الجديدة",
-    template: "مرحباً {{name}} 🎉\n\nعندنا عروض جديدة ومميزة!\nتعال زورنا واستفيد من الخصومات الحصرية ��\n\nفي انتظارك 🏪\n{{storeName}}",
+    template:
+      "مرحباً {{name}} 🎉\n\nعندنا عروض جديدة ومميزة!\nتعال زورنا واستفيد من الخصومات الحصرية ��\n\nفي انتظارك 🏪\n{{storeName}}",
     targetType: "all",
   },
   {
@@ -94,7 +103,8 @@ const MESSAGE_TEMPLATES = [
     bgColor: "bg-purple-50 dark:bg-purple-950",
     borderColor: "border-purple-200 dark:border-purple-800",
     description: "اشكر العملاء على تعاملهم معك",
-    template: "السلام عليكم {{name}} 💚\n\nنشكرك على ثقتك الغالية فينا!\nنتمنى نكون عند حسن ظنك دايماً 🌟\n\nأي وقت محتاج حاجة، إحنا موجودين 🤝\n{{storeName}}",
+    template:
+      "السلام عليكم {{name}} 💚\n\nنشكرك على ثقتك الغالية فينا!\nنتمنى نكون عند حسن ظنك دايماً 🌟\n\nأي وقت محتاج حاجة، إحنا موجودين 🤝\n{{storeName}}",
     targetType: "all",
   },
   {
@@ -113,7 +123,8 @@ const MESSAGE_TEMPLATES = [
 const HELP_CONTENT = {
   noAccounts: {
     title: "📱 محتاج تربط حساب واتساب الأول",
-    description: "عشان تبعت رسائل للعملاء، لازم يكون عندك حساب واتساب مربوط ونشط",
+    description:
+      "عشان تبعت رسائل للعملاء، لازم يكون عندك حساب واتساب مربوط ونشط",
     action: "اذهب لصفحة 'إدارة واتساب' واربط حسابك",
   },
   howToCreate: {
@@ -142,12 +153,14 @@ const WhatsAppCampaigns = () => {
   const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [addDialog, setAddDialog] = useState(false);
   const [helpDialog, setHelpDialog] = useState(false);
   const [previewDialog, setPreviewDialog] = useState(false);
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<string | null>(null);
-  
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<string | null>(
+    null
+  );
+
   const [wizardStep, setWizardStep] = useState(1);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -171,7 +184,12 @@ const WhatsAppCampaigns = () => {
 
   useEffect(() => {
     calculateRecipients();
-  }, [newCampaign.targetType, newCampaign.minAmount, newCampaign.maxAmount, customers]);
+  }, [
+    newCampaign.targetType,
+    newCampaign.minAmount,
+    newCampaign.maxAmount,
+    customers,
+  ]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -184,7 +202,9 @@ const WhatsAppCampaigns = () => {
       ]);
 
       setCampaigns(campaignsData);
-      setAccounts(accountsData.filter((a) => a.isActive && a.status === "connected"));
+      setAccounts(
+        accountsData.filter((a) => a.isActive && a.status === "connected")
+      );
       setCustomers(customersData);
     } catch (error) {
       console.error("Error loading data:", error);
@@ -254,10 +274,10 @@ const WhatsAppCampaigns = () => {
 
   const handleCreate = async () => {
     if (!newCampaign.name || !newCampaign.accountId || !newCampaign.template) {
-      toast({ 
+      toast({
         title: "⚠️ في حاجات ناقصة",
         description: "تأكد إنك ملّيت كل الخانات المطلوبة",
-        variant: "destructive" 
+        variant: "destructive",
       });
       return;
     }
@@ -282,8 +302,12 @@ const WhatsAppCampaigns = () => {
         variables,
         targetType: newCampaign.targetType,
         filters: {
-          minAmount: newCampaign.minAmount ? parseFloat(newCampaign.minAmount) : undefined,
-          maxAmount: newCampaign.maxAmount ? parseFloat(newCampaign.maxAmount) : undefined,
+          minAmount: newCampaign.minAmount
+            ? parseFloat(newCampaign.minAmount)
+            : undefined,
+          maxAmount: newCampaign.maxAmount
+            ? parseFloat(newCampaign.maxAmount)
+            : undefined,
         },
         status: "draft",
         totalRecipients: recipientCount,
@@ -294,16 +318,16 @@ const WhatsAppCampaigns = () => {
       await loadData();
       resetDialog();
 
-      toast({ 
+      toast({
         title: "✅ تم إنشاء الحملة بنجاح!",
         description: "الحملة جاهزة. اضغط ▶️ عشان تشغّلها",
       });
     } catch (error) {
       console.error("Error creating campaign:", error);
-      toast({ 
+      toast({
         title: "❌ فشل إنشاء الحملة",
         description: "حصل مشكلة. جرب تاني",
-        variant: "destructive" 
+        variant: "destructive",
       });
     } finally {
       setIsCreating(false);
@@ -335,16 +359,16 @@ const WhatsAppCampaigns = () => {
       await loadData();
 
       await whatsappService.runCampaign(campaignId);
-      
-      toast({ 
+
+      toast({
         title: "🚀 الحملة شغّالة!",
         description: "الرسائل بتتبعت للعملاء دلوقتي",
       });
     } catch (error) {
-      toast({ 
+      toast({
         title: "❌ فشل تشغيل الحملة",
         description: "تأكد إن حساب الواتساب متصل",
-        variant: "destructive" 
+        variant: "destructive",
       });
     } finally {
       setRunningCampaign(null);
@@ -359,7 +383,7 @@ const WhatsAppCampaigns = () => {
     await db.update("whatsappCampaigns", campaign);
     await loadData();
 
-    toast({ 
+    toast({
       title: "⏸️ الحملة اتوقفت",
       description: "تقدر تكمّلها في أي وقت",
     });
@@ -378,18 +402,50 @@ const WhatsAppCampaigns = () => {
 
   const getStatusInfo = (status: WhatsAppCampaign["status"]) => {
     const info = {
-      draft: { label: "جاهزة للتشغيل", variant: "secondary" as const, icon: Clock, color: "text-gray-500" },
-      scheduled: { label: "مجدولة", variant: "outline" as const, icon: Calendar, color: "text-blue-500" },
-      running: { label: "شغّالة دلوقتي 🔄", variant: "default" as const, icon: Play, color: "text-green-500" },
-      paused: { label: "متوقفة", variant: "secondary" as const, icon: Pause, color: "text-orange-500" },
-      completed: { label: "✅ خلصت", variant: "default" as const, icon: CheckCircle2, color: "text-green-600" },
-      failed: { label: "❌ فشلت", variant: "destructive" as const, icon: XCircle, color: "text-red-500" },
+      draft: {
+        label: "جاهزة للتشغيل",
+        variant: "secondary" as const,
+        icon: Clock,
+        color: "text-gray-500",
+      },
+      scheduled: {
+        label: "مجدولة",
+        variant: "outline" as const,
+        icon: Calendar,
+        color: "text-blue-500",
+      },
+      running: {
+        label: "شغّالة دلوقتي 🔄",
+        variant: "default" as const,
+        icon: Play,
+        color: "text-green-500",
+      },
+      paused: {
+        label: "متوقفة",
+        variant: "secondary" as const,
+        icon: Pause,
+        color: "text-orange-500",
+      },
+      completed: {
+        label: "✅ خلصت",
+        variant: "default" as const,
+        icon: CheckCircle2,
+        color: "text-green-600",
+      },
+      failed: {
+        label: "❌ فشلت",
+        variant: "destructive" as const,
+        icon: XCircle,
+        color: "text-red-500",
+      },
     };
     return info[status];
   };
 
   const totalSent = campaigns.reduce((sum, c) => sum + c.sentCount, 0);
-  const activeCampaigns = campaigns.filter((c) => c.status === "running").length;
+  const activeCampaigns = campaigns.filter(
+    (c) => c.status === "running"
+  ).length;
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -409,11 +465,17 @@ const WhatsAppCampaigns = () => {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setHelpDialog(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setHelpDialog(true)}
+            >
               <HelpCircle className="h-5 w-5" />
             </Button>
             <Button variant="outline" onClick={loadData} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 ml-2 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-4 w-4 ml-2 ${isLoading ? "animate-spin" : ""}`}
+              />
               تحديث
             </Button>
             <Button
@@ -464,7 +526,9 @@ const WhatsAppCampaigns = () => {
                   <Send className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-3xl font-bold text-green-600">{totalSent}</p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {totalSent}
+                  </p>
                   <p className="text-sm text-muted-foreground">رسالة اتبعتت</p>
                 </div>
               </div>
@@ -478,7 +542,9 @@ const WhatsAppCampaigns = () => {
                   <Play className="h-6 w-6 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <p className="text-3xl font-bold text-orange-600">{activeCampaigns}</p>
+                  <p className="text-3xl font-bold text-orange-600">
+                    {activeCampaigns}
+                  </p>
                   <p className="text-sm text-muted-foreground">حملة شغّالة</p>
                 </div>
               </div>
@@ -492,7 +558,9 @@ const WhatsAppCampaigns = () => {
                   <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-3xl font-bold text-purple-600">{customers.length}</p>
+                  <p className="text-3xl font-bold text-purple-600">
+                    {customers.length}
+                  </p>
                   <p className="text-sm text-muted-foreground">عميل</p>
                 </div>
               </div>
@@ -505,7 +573,9 @@ const WhatsAppCampaigns = () => {
             <div>
               <CardTitle className="text-xl">حملاتك</CardTitle>
               <CardDescription>
-                {campaigns.length === 0 ? "مفيش حملات لسه. اعمل أول حملة!" : `عندك ${campaigns.length} حملة`}
+                {campaigns.length === 0
+                  ? "مفيش حملات لسه. اعمل أول حملة!"
+                  : `عندك ${campaigns.length} حملة`}
               </CardDescription>
             </div>
           </CardHeader>
@@ -527,7 +597,11 @@ const WhatsAppCampaigns = () => {
                   زي تذكير بالمستحقات أو إخبارهم بالعروض الجديدة 🎉
                 </p>
                 {accounts.length > 0 && (
-                  <Button onClick={() => setAddDialog(true)} size="lg" className="text-lg px-8">
+                  <Button
+                    onClick={() => setAddDialog(true)}
+                    size="lg"
+                    className="text-lg px-8"
+                  >
                     <Plus className="h-5 w-5 ml-2" />
                     اعمل أول حملة
                   </Button>
@@ -537,18 +611,30 @@ const WhatsAppCampaigns = () => {
               <div className="space-y-4">
                 {campaigns.map((campaign) => {
                   const statusInfo = getStatusInfo(campaign.status);
-                  const progress = campaign.totalRecipients > 0 ? (campaign.sentCount / campaign.totalRecipients) * 100 : 0;
+                  const progress =
+                    campaign.totalRecipients > 0
+                      ? (campaign.sentCount / campaign.totalRecipients) * 100
+                      : 0;
                   const StatusIcon = statusInfo.icon;
 
                   return (
-                    <Card key={campaign.id} className="border-2 hover:border-primary/50 transition-colors">
+                    <Card
+                      key={campaign.id}
+                      className="border-2 hover:border-primary/50 transition-colors"
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
-                              <StatusIcon className={`h-5 w-5 ${statusInfo.color}`} />
-                              <h3 className="font-bold text-lg">{campaign.name}</h3>
-                              <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                              <StatusIcon
+                                className={`h-5 w-5 ${statusInfo.color}`}
+                              />
+                              <h3 className="font-bold text-lg">
+                                {campaign.name}
+                              </h3>
+                              <Badge variant={statusInfo.variant}>
+                                {statusInfo.label}
+                              </Badge>
                             </div>
 
                             <div className="space-y-2">
@@ -568,38 +654,67 @@ const WhatsAppCampaigns = () => {
                                   </span>
                                 )}
                               </div>
-                              
+
                               <div className="flex items-center gap-3">
-                                <Progress value={progress} className="h-3 flex-1" />
-                                <span className="text-sm font-medium w-12">{Math.round(progress)}%</span>
+                                <Progress
+                                  value={progress}
+                                  className="h-3 flex-1"
+                                />
+                                <span className="text-sm font-medium w-12">
+                                  {Math.round(progress)}%
+                                </span>
                               </div>
                             </div>
 
                             <p className="text-xs text-muted-foreground mt-2">
-                              �� {new Date(campaign.createdAt).toLocaleDateString("ar-EG", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })}
+                              ��{" "}
+                              {new Date(campaign.createdAt).toLocaleDateString(
+                                "ar-EG",
+                                {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                }
+                              )}
                             </p>
                           </div>
 
                           <div className="flex gap-2 mr-4">
-                            {(campaign.status === "draft" || campaign.status === "paused") && (
-                              <Button onClick={() => handleRun(campaign.id)} disabled={runningCampaign === campaign.id} className="gap-2">
-                                {runningCampaign === campaign.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {(campaign.status === "draft" ||
+                              campaign.status === "paused") && (
+                              <Button
+                                onClick={() => handleRun(campaign.id)}
+                                disabled={runningCampaign === campaign.id}
+                                className="gap-2"
+                              >
+                                {runningCampaign === campaign.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Play className="h-4 w-4" />
+                                )}
                                 {campaign.status === "paused" ? "كمّل" : "شغّل"}
                               </Button>
                             )}
 
                             {campaign.status === "running" && (
-                              <Button variant="secondary" onClick={() => handlePause(campaign.id)} className="gap-2">
+                              <Button
+                                variant="secondary"
+                                onClick={() => handlePause(campaign.id)}
+                                className="gap-2"
+                              >
                                 <Pause className="h-4 w-4" />
                                 وقّف
                               </Button>
                             )}
 
-                            <Button size="icon" variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteConfirmDialog(campaign.id)}>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() =>
+                                setDeleteConfirmDialog(campaign.id)
+                              }
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
@@ -613,8 +728,14 @@ const WhatsAppCampaigns = () => {
           </CardContent>
         </Card>
 
-        <Dialog open={addDialog} onOpenChange={(open) => !open && resetDialog()}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <Dialog
+          open={addDialog}
+          onOpenChange={(open) => !open && resetDialog()}
+        >
+          <DialogContent
+            className="max-w-3xl max-h-[90vh] overflow-y-auto"
+            dir="rtl"
+          >
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-3">
                 <Megaphone className="h-7 w-7 text-primary" />
@@ -630,10 +751,22 @@ const WhatsAppCampaigns = () => {
             <div className="flex items-center justify-center gap-2 py-4">
               {[1, 2, 3].map((step) => (
                 <div key={step} className="flex items-center gap-2">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${wizardStep >= step ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${
+                      wizardStep >= step
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
                     {step}
                   </div>
-                  {step < 3 && <div className={`w-16 h-1 rounded ${wizardStep > step ? "bg-primary" : "bg-muted"}`} />}
+                  {step < 3 && (
+                    <div
+                      className={`w-16 h-1 rounded ${
+                        wizardStep > step ? "bg-primary" : "bg-muted"
+                      }`}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -647,7 +780,13 @@ const WhatsAppCampaigns = () => {
                     return (
                       <Card
                         key={template.id}
-                        className={`cursor-pointer transition-all hover:scale-[1.02] ${template.bgColor} ${template.borderColor} border-2 ${selectedTemplate === template.id ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                        className={`cursor-pointer transition-all hover:scale-[1.02] ${
+                          template.bgColor
+                        } ${template.borderColor} border-2 ${
+                          selectedTemplate === template.id
+                            ? "ring-2 ring-primary ring-offset-2"
+                            : ""
+                        }`}
                         onClick={() => handleSelectTemplate(template.id)}
                       >
                         <CardContent className="p-4">
@@ -657,7 +796,9 @@ const WhatsAppCampaigns = () => {
                             </div>
                             <div>
                               <h4 className="font-bold">{template.name}</h4>
-                              <p className="text-sm text-muted-foreground">{template.description}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {template.description}
+                              </p>
                             </div>
                           </div>
                           {selectedTemplate === template.id && (
@@ -676,13 +817,29 @@ const WhatsAppCampaigns = () => {
             {wizardStep === 2 && (
               <div className="space-y-6">
                 <div>
-                  <Label className="text-base font-bold mb-2 block">اسم الحملة *</Label>
-                  <Input value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} placeholder="مثال: تذكير بمستحقات شهر ديسمبر" className="text-lg" />
+                  <Label className="text-base font-bold mb-2 block">
+                    اسم الحملة *
+                  </Label>
+                  <Input
+                    value={newCampaign.name}
+                    onChange={(e) =>
+                      setNewCampaign({ ...newCampaign, name: e.target.value })
+                    }
+                    placeholder="مثال: تذكير بمستحقات شهر ديسمبر"
+                    className="text-lg"
+                  />
                 </div>
 
                 <div>
-                  <Label className="text-base font-bold mb-2 block">حساب الواتساب *</Label>
-                  <Select value={newCampaign.accountId} onValueChange={(value) => setNewCampaign({ ...newCampaign, accountId: value })}>
+                  <Label className="text-base font-bold mb-2 block">
+                    حساب الواتساب *
+                  </Label>
+                  <Select
+                    value={newCampaign.accountId}
+                    onValueChange={(value) =>
+                      setNewCampaign({ ...newCampaign, accountId: value })
+                    }
+                  >
                     <SelectTrigger className="text-lg">
                       <SelectValue placeholder="اختار الحساب اللي هيبعت منه" />
                     </SelectTrigger>
@@ -691,7 +848,8 @@ const WhatsAppCampaigns = () => {
                         <SelectItem key={account.id} value={account.id}>
                           <span className="flex items-center gap-2">
                             <Smartphone className="h-4 w-4" />
-                            {account.name} {account.phone && `(${account.phone})`}
+                            {account.name}{" "}
+                            {account.phone && `(${account.phone})`}
                           </span>
                         </SelectItem>
                       ))}
@@ -700,19 +858,34 @@ const WhatsAppCampaigns = () => {
                 </div>
 
                 <div>
-                  <Label className="text-base font-bold mb-2 block">العملاء المستهدفين</Label>
+                  <Label className="text-base font-bold mb-2 block">
+                    العملاء المستهدفين
+                  </Label>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { value: "all", label: "كل العملاء", icon: Users },
-                      { value: "credit", label: "عليهم فلوس", icon: CreditCard },
+                      {
+                        value: "credit",
+                        label: "عليهم فلوس",
+                        icon: CreditCard,
+                      },
                       { value: "installment", label: "تقسيط", icon: Calendar },
                     ].map((option) => {
                       const Icon = option.icon;
                       return (
                         <Card
                           key={option.value}
-                          className={`cursor-pointer transition-all p-4 ${newCampaign.targetType === option.value ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted"}`}
-                          onClick={() => setNewCampaign({ ...newCampaign, targetType: option.value as any })}
+                          className={`cursor-pointer transition-all p-4 ${
+                            newCampaign.targetType === option.value
+                              ? "ring-2 ring-primary bg-primary/5"
+                              : "hover:bg-muted"
+                          }`}
+                          onClick={() =>
+                            setNewCampaign({
+                              ...newCampaign,
+                              targetType: option.value as any,
+                            })
+                          }
                         >
                           <div className="flex flex-col items-center gap-2 text-center">
                             <Icon className="h-8 w-8 text-primary" />
@@ -728,26 +901,60 @@ const WhatsAppCampaigns = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>الحد الأدنى للمبلغ</Label>
-                      <Input type="number" value={newCampaign.minAmount} onChange={(e) => setNewCampaign({ ...newCampaign, minAmount: e.target.value })} placeholder="0" />
+                      <Input
+                        type="number"
+                        value={newCampaign.minAmount}
+                        onChange={(e) =>
+                          setNewCampaign({
+                            ...newCampaign,
+                            minAmount: e.target.value,
+                          })
+                        }
+                        placeholder="0"
+                      />
                     </div>
                     <div>
                       <Label>الحد الأقصى للمبلغ</Label>
-                      <Input type="number" value={newCampaign.maxAmount} onChange={(e) => setNewCampaign({ ...newCampaign, maxAmount: e.target.value })} placeholder="بلا حد" />
+                      <Input
+                        type="number"
+                        value={newCampaign.maxAmount}
+                        onChange={(e) =>
+                          setNewCampaign({
+                            ...newCampaign,
+                            maxAmount: e.target.value,
+                          })
+                        }
+                        placeholder="بلا حد"
+                      />
                     </div>
                   </div>
                 )}
 
-                <Card className={recipientCount === 0 ? "border-red-500" : "border-green-500"}>
+                <Card
+                  className={
+                    recipientCount === 0 ? "border-red-500" : "border-green-500"
+                  }
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <Users className={`h-8 w-8 ${recipientCount === 0 ? "text-red-500" : "text-green-500"}`} />
+                        <Users
+                          className={`h-8 w-8 ${
+                            recipientCount === 0
+                              ? "text-red-500"
+                              : "text-green-500"
+                          }`}
+                        />
                         <div>
                           <p className="text-2xl font-bold">{recipientCount}</p>
-                          <p className="text-sm text-muted-foreground">عميل هيوصلهم الرسالة</p>
+                          <p className="text-sm text-muted-foreground">
+                            عميل هيوصلهم الرسالة
+                          </p>
                         </div>
                       </div>
-                      {recipientCount === 0 && <Badge variant="destructive">مفيش عملاء!</Badge>}
+                      {recipientCount === 0 && (
+                        <Badge variant="destructive">مفيش عملاء!</Badge>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -759,12 +966,27 @@ const WhatsAppCampaigns = () => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label className="text-base font-bold">نص الرسالة</Label>
-                    <Button variant="outline" size="sm" onClick={generatePreview}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={generatePreview}
+                    >
                       <Eye className="h-4 w-4 ml-2" />
                       معاينة
                     </Button>
                   </div>
-                  <Textarea value={newCampaign.template} onChange={(e) => setNewCampaign({ ...newCampaign, template: e.target.value })} placeholder="اكتب رسالتك هنا..." rows={8} className="text-lg leading-relaxed" />
+                  <Textarea
+                    value={newCampaign.template}
+                    onChange={(e) =>
+                      setNewCampaign({
+                        ...newCampaign,
+                        template: e.target.value,
+                      })
+                    }
+                    placeholder="اكتب رسالتك هنا..."
+                    rows={8}
+                    className="text-lg leading-relaxed"
+                  />
                 </div>
 
                 <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
@@ -773,10 +995,22 @@ const WhatsAppCampaigns = () => {
                       <Sparkles className="h-5 w-5 text-blue-500" />
                       المتغيرات التلقائية
                     </h4>
-                    <p className="text-sm text-muted-foreground mb-3">دي كلمات بتتغير تلقائي لكل عميل:</p>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      دي كلمات بتتغير تلقائي لكل عميل:
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {HELP_CONTENT.variables.items.map((item) => (
-                        <Badge key={item.var} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-primary-foreground" onClick={() => setNewCampaign({ ...newCampaign, template: newCampaign.template + " " + item.var })}>
+                        <Badge
+                          key={item.var}
+                          variant="secondary"
+                          className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                          onClick={() =>
+                            setNewCampaign({
+                              ...newCampaign,
+                              template: newCampaign.template + " " + item.var,
+                            })
+                          }
+                        >
                           {item.var} = {item.desc}
                         </Badge>
                       ))}
@@ -788,9 +1022,17 @@ const WhatsAppCampaigns = () => {
                   <CardContent className="p-4">
                     <h4 className="font-bold mb-3">📋 ملخص الحملة</h4>
                     <div className="space-y-2 text-sm">
-                      <p>📝 <strong>الاسم:</strong> {newCampaign.name || "-"}</p>
-                      <p>📱 <strong>الحساب:</strong> {accounts.find(a => a.id === newCampaign.accountId)?.name || "-"}</p>
-                      <p>👥 <strong>المستهدفين:</strong> {recipientCount} عميل</p>
+                      <p>
+                        📝 <strong>الاسم:</strong> {newCampaign.name || "-"}
+                      </p>
+                      <p>
+                        📱 <strong>الحساب:</strong>{" "}
+                        {accounts.find((a) => a.id === newCampaign.accountId)
+                          ?.name || "-"}
+                      </p>
+                      <p>
+                        👥 <strong>المستهدفين:</strong> {recipientCount} عميل
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -799,20 +1041,48 @@ const WhatsAppCampaigns = () => {
 
             <DialogFooter className="gap-2 sm:gap-0">
               {wizardStep > 1 && (
-                <Button variant="outline" onClick={() => setWizardStep((s) => s - 1)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setWizardStep((s) => s - 1)}
+                >
                   <ArrowRight className="h-4 w-4 ml-2" />
                   رجوع
                 </Button>
               )}
-              <Button variant="ghost" onClick={resetDialog}>إلغاء</Button>
+              <Button variant="ghost" onClick={resetDialog}>
+                إلغاء
+              </Button>
               {wizardStep < 3 ? (
-                <Button onClick={() => setWizardStep((s) => s + 1)} disabled={(wizardStep === 1 && !selectedTemplate) || (wizardStep === 2 && (!newCampaign.name || !newCampaign.accountId))}>
+                <Button
+                  onClick={() => setWizardStep((s) => s + 1)}
+                  disabled={
+                    (wizardStep === 1 && !selectedTemplate) ||
+                    (wizardStep === 2 &&
+                      (!newCampaign.name || !newCampaign.accountId))
+                  }
+                >
                   التالي
                   <ArrowLeft className="h-4 w-4 mr-2" />
                 </Button>
               ) : (
-                <Button onClick={handleCreate} disabled={isCreating || !newCampaign.template || recipientCount === 0} className="gap-2">
-                  {isCreating ? <><Loader2 className="h-4 w-4 animate-spin" />جاري الإنشاء...</> : <><CheckCircle2 className="h-4 w-4" />إنشاء الحملة</>}
+                <Button
+                  onClick={handleCreate}
+                  disabled={
+                    isCreating || !newCampaign.template || recipientCount === 0
+                  }
+                  className="gap-2"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      جاري الإنشاء...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      إنشاء الحملة
+                    </>
+                  )}
                 </Button>
               )}
             </DialogFooter>
@@ -822,27 +1092,59 @@ const WhatsAppCampaigns = () => {
         <Dialog open={previewDialog} onOpenChange={setPreviewDialog}>
           <DialogContent dir="rtl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Eye className="h-5 w-5" />معاينة الرسالة</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                معاينة الرسالة
+              </DialogTitle>
               <DialogDescription>كده هتظهر الرسالة للعميل</DialogDescription>
             </DialogHeader>
             <Card className="bg-green-50 dark:bg-green-950 border-green-300">
               <CardContent className="p-4">
-                <div className="whitespace-pre-wrap text-base leading-relaxed">{previewMessage}</div>
+                <div className="whitespace-pre-wrap text-base leading-relaxed">
+                  {previewMessage}
+                </div>
               </CardContent>
             </Card>
-            <DialogFooter><Button onClick={() => setPreviewDialog(false)}>تمام</Button></DialogFooter>
+            <DialogFooter>
+              <Button onClick={() => setPreviewDialog(false)}>تمام</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!deleteConfirmDialog} onOpenChange={() => setDeleteConfirmDialog(null)}>
+        <Dialog
+          open={!!deleteConfirmDialog}
+          onOpenChange={() => setDeleteConfirmDialog(null)}
+        >
           <DialogContent dir="rtl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="h-5 w-5" />حذف الحملة؟</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+                حذف الحملة؟
+              </DialogTitle>
             </DialogHeader>
-            <p className="text-center py-4">هل أنت متأكد من حذف هذه الحملة؟<br /><span className="text-muted-foreground text-sm">لا يمكن التراجع عن هذا الإجراء</span></p>
+            <p className="text-center py-4">
+              هل أنت متأكد من حذف هذه الحملة؟
+              <br />
+              <span className="text-muted-foreground text-sm">
+                لا يمكن التراجع عن هذا الإجراء
+              </span>
+            </p>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setDeleteConfirmDialog(null)}>لا، إلغاء</Button>
-              <Button variant="destructive" onClick={() => deleteConfirmDialog && handleDelete(deleteConfirmDialog)}><Trash2 className="h-4 w-4 ml-2" />نعم، احذف</Button>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirmDialog(null)}
+              >
+                لا، إلغاء
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  deleteConfirmDialog && handleDelete(deleteConfirmDialog)
+                }
+              >
+                <Trash2 className="h-4 w-4 ml-2" />
+                نعم، احذف
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -850,19 +1152,39 @@ const WhatsAppCampaigns = () => {
         <Dialog open={helpDialog} onOpenChange={setHelpDialog}>
           <DialogContent dir="rtl" className="max-w-lg">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl"><HelpCircle className="h-6 w-6 text-primary" />مساعدة - الحملات التسويقية</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <HelpCircle className="h-6 w-6 text-primary" />
+                مساعدة - الحملات التسويقية
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
               <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                 <CardContent className="p-4">
-                  <h4 className="font-bold mb-3">{HELP_CONTENT.howToCreate.title}</h4>
-                  <div className="space-y-2">{HELP_CONTENT.howToCreate.steps.map((step, i) => <p key={i} className="text-sm">{step}</p>)}</div>
+                  <h4 className="font-bold mb-3">
+                    {HELP_CONTENT.howToCreate.title}
+                  </h4>
+                  <div className="space-y-2">
+                    {HELP_CONTENT.howToCreate.steps.map((step, i) => (
+                      <p key={i} className="text-sm">
+                        {step}
+                      </p>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <h4 className="font-bold mb-3">{HELP_CONTENT.variables.title}</h4>
-                  <div className="space-y-2">{HELP_CONTENT.variables.items.map((item) => <div key={item.var} className="flex items-center gap-2"><Badge variant="outline">{item.var}</Badge><span className="text-sm">= {item.desc}</span></div>)}</div>
+                  <h4 className="font-bold mb-3">
+                    {HELP_CONTENT.variables.title}
+                  </h4>
+                  <div className="space-y-2">
+                    {HELP_CONTENT.variables.items.map((item) => (
+                      <div key={item.var} className="flex items-center gap-2">
+                        <Badge variant="outline">{item.var}</Badge>
+                        <span className="text-sm">= {item.desc}</span>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
@@ -877,7 +1199,9 @@ const WhatsAppCampaigns = () => {
                 </CardContent>
               </Card>
             </div>
-            <DialogFooter><Button onClick={() => setHelpDialog(false)}>فهمت، شكراً!</Button></DialogFooter>
+            <DialogFooter>
+              <Button onClick={() => setHelpDialog(false)}>فهمت، شكراً!</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </main>

@@ -5,7 +5,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { db, User, Role } from "@/lib/indexedDB";
+import { db, User, Role } from "@/shared/lib/indexedDB";
 
 interface AuthContextType {
   user: User | null;
@@ -52,12 +52,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Prioritize roleId, fallback to role for backwards compatibility
       const roleIdToLoad = user.roleId || user.role;
-      console.log(`[AuthContext] Loading role for user "${user.username}": ${roleIdToLoad}`);
+      console.log(
+        `[AuthContext] Loading role for user "${user.username}": ${roleIdToLoad}`
+      );
 
       const role = await db.get<Role>("roles", roleIdToLoad);
 
       if (role) {
-        console.log(`[AuthContext] Role loaded successfully:`, role.name, `(${role.id})`);
+        console.log(
+          `[AuthContext] Role loaded successfully:`,
+          role.name,
+          `(${role.id})`
+        );
         console.log(`[AuthContext] Permissions:`, role.permissions);
         setUserRole(role);
       } else {

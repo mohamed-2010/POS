@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { db, ExpenseItem, ExpenseCategory } from "@/lib/indexedDB";
+import { db, ExpenseItem, ExpenseCategory } from "@/shared/lib/indexedDB";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -131,7 +131,7 @@ const Expenses = () => {
         toast({
           title: "يجب فتح وردية أولاً",
           description: "لا يمكن إضافة مصروف بدون وردية مفتوحة",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }

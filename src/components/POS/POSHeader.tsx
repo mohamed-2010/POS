@@ -42,7 +42,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { db, Shift } from "@/lib/indexedDB";
+import { db, Shift } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { ZReportDialog } from "@/components/dialogs/ZReportDialog";
 import { useShift } from "@/contexts/ShiftContext";

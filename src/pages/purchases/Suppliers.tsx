@@ -13,7 +13,7 @@ import {
   FileText,
   DollarSign,
 } from "lucide-react";
-import { db, Supplier, Purchase } from "@/lib/indexedDB";
+import { db, Supplier, Purchase } from "@/shared/lib/indexedDB";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
