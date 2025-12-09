@@ -10,7 +10,7 @@ import { db, User, Role } from "@/shared/lib/indexedDB";
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isLoading: boolean;
   can: (resource: string, action: string) => boolean;
 }
@@ -82,18 +82,82 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     password: string
   ): Promise<boolean> => {
     try {
-      const users = await db.getAll<User>("users");
-      const foundUser = users.find(
-        (u) => u.username === username && u.password === password && u.active
-      );
+      // First try Backend API authentication
+      try {
+        const { getFastifyClient } = await import("@/infrastructure/http");
+        const { getWebSocketClient } = await import("@/infrastructure/http");
+        const httpClient = getFastifyClient();
 
-      if (foundUser) {
-        setUser(foundUser);
-        localStorage.setItem("currentUserId", foundUser.id);
-        // جلب صلاحيات الدور
-        await loadUserRole(foundUser);
-        return true;
+        // Call backend login API
+        const response = await httpClient.post<{
+          accessToken: string;
+          refreshToken: string;
+          expiresIn: string;
+          user: any;
+        }>("/api/auth/login", {
+          username, // Backend expects username field
+          password,
+        });
+
+        if (response) {
+          const { accessToken, refreshToken, user: backendUser } = response;
+
+          // Store JWT tokens in FastifyClient
+          httpClient.setAuth({ accessToken, refreshToken });
+
+          // Set auth for WebSocket
+          const wsClient = getWebSocketClient();
+          if (wsClient && !wsClient.isConnected()) {
+            wsClient.connect();
+          }
+
+          // Get or create local user record
+          const users = await db.getAll<User>("users");
+          let localUser = users.find((u) => u.username === username);
+
+          if (!localUser) {
+            // Create local user from backend data
+            localUser = {
+              id: backendUser.id || username,
+              username: backendUser.username || username,
+              name: backendUser.name || username,
+              password: "", // Don't store password locally
+              role: backendUser.role || "cashier",
+              roleId: backendUser.roleId || "cashier",
+              active: true,
+              createdAt: new Date().toISOString(),
+            };
+            await db.add("users", localUser);
+          }
+
+          setUser(localUser);
+          localStorage.setItem("currentUserId", localUser.id);
+          await loadUserRole(localUser);
+
+          console.log("✅ Backend authentication successful");
+          return true;
+        }
+      } catch (backendError: any) {
+        console.warn(
+          "Backend authentication failed, falling back to local:",
+          backendError?.message || backendError
+        );
+
+        // Fallback to local authentication
+        const users = await db.getAll<User>("users");
+        const foundUser = users.find(
+          (u) => u.username === username && u.password === password && u.active
+        );
+
+        if (foundUser) {
+          setUser(foundUser);
+          localStorage.setItem("currentUserId", foundUser.id);
+          await loadUserRole(foundUser);
+          console.log("✅ Local authentication successful (offline mode)");
+          return true;
+        }
       }
+
       return false;
     } catch (error) {
       console.error("Login error:", error);
@@ -101,7 +165,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      // Try to logout from backend
+      const { getFastifyClient } = await import("@/infrastructure/http");
+      const { getWebSocketClient } = await import("@/infrastructure/http");
+      const httpClient = getFastifyClient();
+
+      try {
+        await httpClient.logout();
+      } catch (error) {
+        console.warn("Backend logout failed:", error);
+      }
+
+      // Disconnect WebSocket
+      const wsClient = getWebSocketClient();
+      if (wsClient) {
+        wsClient.disconnect();
+      }
+
+      // Clear local auth
+      httpClient.clearAuth();
+    } catch (error) {
+      console.warn("Error during logout:", error);
+    }
+
+    // Clear local state
     setUser(null);
     setUserRole(null);
     localStorage.removeItem("currentUserId");

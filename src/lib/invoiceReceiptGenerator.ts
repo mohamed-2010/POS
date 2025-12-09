@@ -1,4 +1,4 @@
-import { Invoice } from "./indexedDB";
+import { Invoice } from "@/shared/lib/indexedDB";
 
 export interface InvoiceReceiptOptions {
   storeName?: string;

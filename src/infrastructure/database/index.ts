@@ -2,6 +2,7 @@
 export * from "./types";
 export * from "./IndexedDBClient";
 export * from "./IndexedDBRepository";
+export * from "./SyncableRepository";
 export * from "./DatabaseService";
 
 // Migrations

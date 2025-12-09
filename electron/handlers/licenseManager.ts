@@ -20,10 +20,10 @@ const LICENSE_FILE_NAME = "license.dat";
 const ALGORITHM = "aes-256-gcm";
 
 // ==================== License Server Configuration ====================
-// غيّر هذا لعنوان السيرفر الخاص بك
-const LICENSE_SERVER_URL = "https://your-license-server.com/api/license";
-// أو استخدم Google Sheets / Firebase / Supabase كـ backend مجاني
-const USE_ONLINE_VALIDATION = false; // فعّل هذا عندما يكون السيرفر جاهز
+// استخدام Backend المحلي - استخدم 127.0.0.1 بدل localhost لتجنب مشاكل IPv6
+const LICENSE_SERVER_URL = "http://127.0.0.1:3030/api/license";
+// فعّل التحقق من السيرفر
+const USE_ONLINE_VALIDATION = true;
 
 // ==================== Interfaces ====================
 
@@ -221,28 +221,45 @@ async function activateLicenseOnline(
   deviceId: string,
   customerName?: string
 ): Promise<ServerLicenseResponse> {
+  console.log("🌐 activateLicenseOnline called:", {
+    licenseKey,
+    deviceId,
+    customerName,
+  });
+  console.log("📡 USE_ONLINE_VALIDATION:", USE_ONLINE_VALIDATION);
+  console.log("📡 LICENSE_SERVER_URL:", LICENSE_SERVER_URL);
+
   if (!USE_ONLINE_VALIDATION) {
+    console.log("⚠️ Online validation disabled");
     return { success: true, valid: true, message: "Offline mode" };
   }
 
   try {
+    const payload = {
+      licenseKey,
+      deviceId,
+      customerName,
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      hostname: os.hostname(),
+    };
+
+    console.log("📨 Sending request to:", `${LICENSE_SERVER_URL}/activate`);
+    console.log("📨 Payload:", payload);
+
     const response = await fetch(`${LICENSE_SERVER_URL}/activate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        licenseKey,
-        deviceId,
-        customerName,
-        appVersion: app.getVersion(),
-        platform: process.platform,
-        hostname: os.hostname(),
-      }),
+      body: JSON.stringify(payload),
     });
+
+    console.log("📬 Response status:", response.status, response.statusText);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.log("❌ Server error:", errorData);
       return {
         success: false,
         message: errorData.message || `Server error: ${response.status}`,
@@ -251,9 +268,11 @@ async function activateLicenseOnline(
       };
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log("✅ Server response:", result);
+    return result;
   } catch (error: any) {
-    console.error("Online activation error:", error);
+    console.error("❌ Online activation error:", error);
     return {
       success: false,
       message: "فشل الاتصال بالسيرفر. تأكد من اتصال الإنترنت.",
@@ -414,10 +433,21 @@ function validateLicenseKeyFormat(licenseKey: string): boolean {
 
   // المفتاح يجب أن يكون 16 حرف
   if (cleanKey.length !== 16) {
+    console.log(
+      "❌ License key length invalid:",
+      cleanKey.length,
+      "expected 16"
+    );
     return false;
   }
 
-  // التحقق من الـ checksum (آخر 4 أحرف)
+  // في Development mode أو لو المفتاح يبدأ بـ TEST - skip checksum
+  if (!app.isPackaged || cleanKey.startsWith("TEST")) {
+    console.log("✅ License key format valid (dev/test mode)");
+    return true;
+  }
+
+  // التحقق من الـ checksum (آخر 4 أحرف) - للإنتاج فقط
   const keyPart = cleanKey.substring(0, 12);
   const checksum = cleanKey.substring(12, 16);
 
@@ -428,7 +458,9 @@ function validateLicenseKeyFormat(licenseKey: string): boolean {
     .digest("hex");
   const expectedChecksum = hash.substring(0, 4).toUpperCase();
 
-  return checksum === expectedChecksum;
+  const isValid = checksum === expectedChecksum;
+  console.log("🔐 Checksum validation:", isValid ? "✅" : "❌");
+  return isValid;
 }
 
 /**
@@ -549,14 +581,19 @@ async function activateLicense(
   customerName?: string,
   expiryDate?: string
 ): Promise<{ success: boolean; message: string; deviceId?: string }> {
+  console.log("🔐 activateLicense called with:", { licenseKey, customerName });
+
   // التحقق من صيغة المفتاح
   if (!validateLicenseKeyFormat(licenseKey)) {
+    console.log("❌ Invalid license key format:", licenseKey);
     return {
       success: false,
       message:
         "مفتاح الترخيص غير صالح. يرجى التحقق من المفتاح والمحاولة مرة أخرى.",
     };
   }
+
+  console.log("✅ License key format is valid");
 
   // التحقق إذا كان هناك ترخيص موجود محلياً
   const existingLicense = loadLicenseData();

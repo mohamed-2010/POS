@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Info,
+  Home,
+  ArrowRight,
 } from "lucide-react";
 
 interface LicenseData {
@@ -52,6 +55,7 @@ interface LicenseStatus {
 
 const LicenseActivation: React.FC = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(
@@ -238,14 +242,38 @@ const LicenseActivation: React.FC = () => {
   return (
     <div className="container mx-auto p-6 max-w-4xl" dir="rtl">
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-          <Shield className="h-8 w-8 text-primary" />
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/")}
+            className="gap-2"
+          >
+            <Home className="h-4 w-4" />
+            الصفحة الرئيسية
+          </Button>
+
+          {licenseStatus?.valid && (
+            <Button
+              variant="default"
+              onClick={() => navigate("/")}
+              className="gap-2"
+            >
+              الاستمرار للتطبيق
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        <h1 className="text-3xl font-bold">تفعيل التطبيق</h1>
-        <p className="text-muted-foreground mt-2">
-          قم بتفعيل نسختك للاستمتاع بجميع المميزات
-        </p>
+
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+            <Shield className="h-8 w-8 text-primary" />
+          </div>
+          <h1 className="text-3xl font-bold">تفعيل التطبيق</h1>
+          <p className="text-muted-foreground mt-2">
+            قم بتفعيل نسختك للاستمتاع بجميع المميزات
+          </p>
+        </div>
       </div>
 
       {/* License Status Card */}
@@ -360,7 +388,16 @@ const LicenseActivation: React.FC = () => {
 
             <Separator className="my-4" />
 
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
+              <Button
+                variant="default"
+                onClick={() => navigate("/")}
+                className="gap-2"
+              >
+                <Home className="h-4 w-4" />
+                الذهاب للصفحة الرئيسية
+              </Button>
+
               <Button
                 variant="outline"
                 className="text-red-500 hover:text-red-600"

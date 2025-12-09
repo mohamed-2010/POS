@@ -1,5 +1,6 @@
 import { IndexedDBClient } from "./IndexedDBClient";
 import { IndexedDBRepository } from "./IndexedDBRepository";
+import { SyncableRepository } from "./SyncableRepository";
 import { MigrationRunner } from "./migrations/MigrationRunner";
 import { SeederRunner } from "./seeders/SeederRunner";
 import { migration_v5 } from "./migrations/v5-shift-purchase-returns";
@@ -10,12 +11,14 @@ import { SettingsSeeder } from "./seeders/SettingsSeeder";
 /**
  * DatabaseService - Facade pattern للوصول لقاعدة البيانات
  * Single Responsibility: تنسيق بين المكونات المختلفة
+ * 
+ * Updated: Now uses SyncableRepository to enable automatic sync with backend
  */
 export class DatabaseService {
   private client: IndexedDBClient;
   private migrationRunner: MigrationRunner;
   private seederRunner: SeederRunner;
-  private repositories: Map<string, IndexedDBRepository> = new Map();
+  private repositories: Map<string, SyncableRepository<any>> = new Map();
 
   constructor(dbName: string = "MASRPOS", dbVersion: number = 14) {
     this.client = new IndexedDBClient({ name: dbName, version: dbVersion });
@@ -59,15 +62,22 @@ export class DatabaseService {
 
   /**
    * Get repository for a store
+   * Returns SyncableRepository to enable automatic sync with backend
+   * 
+   * @param storeName - Name of the IndexedDB store
+   * @param enableSync - Enable sync (default: true). Set to false for stores that shouldn't sync
    */
-  getRepository<T = any>(storeName: string): IndexedDBRepository<T> {
+  getRepository<T extends { id: string | number; local_updated_at?: string }>(
+    storeName: string,
+    enableSync: boolean = true
+  ): SyncableRepository<T> {
     if (!this.repositories.has(storeName)) {
       this.repositories.set(
         storeName,
-        new IndexedDBRepository<T>(this.client, storeName)
+        new SyncableRepository<T>(this.client, storeName, enableSync)
       );
     }
-    return this.repositories.get(storeName) as IndexedDBRepository<T>;
+    return this.repositories.get(storeName) as SyncableRepository<T>;
   }
 
   /**

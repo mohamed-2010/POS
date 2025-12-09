@@ -67,11 +67,26 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        // Polyfills for Node.js built-in modules
+        events: "events",
+        buffer: "buffer",
+        stream: "stream-browserify",
+        util: "util",
+      },
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        define: {
+          global: "globalThis",
+        },
       },
     },
     build: {
       outDir: "dist",
       emptyOutDir: true,
+      rollupOptions: {
+        external: isElectron ? [] : undefined,
+      },
     },
   };
 });

@@ -1,5 +1,5 @@
 // Transaction Service - يلف جميع العمليات ويضيف audit logging تلقائياً
-import { db, AuditLog } from "./indexedDB";
+import { db, AuditLog } from "@/shared/lib/indexedDB";
 
 interface TransactionContext {
   userId: string;

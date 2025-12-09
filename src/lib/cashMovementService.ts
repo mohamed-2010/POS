@@ -1,5 +1,5 @@
 // Cash Movements Service - إدارة حركات النقدية أثناء الوردية
-import { db, CashMovement, Shift } from "./indexedDB";
+import { db, CashMovement, Shift } from "@/shared/lib/indexedDB";
 import { writeAuditLog } from "./transactionService";
 
 interface CashMovementInput {
@@ -167,7 +167,7 @@ export async function getShiftCashSummary(shiftId: number): Promise<{
   difference?: number;
 }> {
   // استخدام الدالة الموحدة من calculationService
-  const { calculateExpectedCash } = await import('./calculationService');
+  const { calculateExpectedCash } = await import("./calculationService");
 
   const result = await calculateExpectedCash(shiftId.toString());
 

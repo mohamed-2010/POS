@@ -2,13 +2,18 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { db } from "./shared/lib/indexedDB";
+import { SyncProvider } from "./components/sync";
 
 // تهيئة قاعدة البيانات قبل بدء التطبيق
 db.init()
   .then(() => {
     console.log("✅ Database initialized successfully");
-    // بدء التطبيق بعد تهيئة قاعدة البيانات
-    createRoot(document.getElementById("root")!).render(<App />);
+    // بدء التطبيق مع SyncProvider للربط مع الباك إند
+    createRoot(document.getElementById("root")!).render(
+      <SyncProvider>
+        <App />
+      </SyncProvider>
+    );
   })
   .catch((error) => {
     console.error("❌ Failed to initialize database:", error);

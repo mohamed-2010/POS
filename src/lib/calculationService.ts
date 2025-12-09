@@ -9,7 +9,7 @@
  * - حسابات النقدية المتوقعة
  */
 
-import { db } from "./indexedDB";
+import { db } from "@/shared/lib/indexedDB";
 
 // ==================== Types ====================
 
