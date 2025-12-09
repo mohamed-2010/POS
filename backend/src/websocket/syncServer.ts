@@ -46,10 +46,9 @@ class WebSocketSyncServer {
   constructor(private server: FastifyInstance) { }
 
   async initialize(): Promise<void> {
-    this.server.register(async (fastify) => {
-      fastify.get("/ws", { websocket: true }, (connection, req) => {
-        this.handleConnection(connection, req);
-      });
+    // Register WebSocket route directly on the server
+    this.server.get("/ws", { websocket: true }, (connection, req) => {
+      this.handleConnection(connection, req);
     });
 
     this.startPingInterval();
