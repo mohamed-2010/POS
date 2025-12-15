@@ -168,8 +168,8 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <LicenseGuard>
-          <Router>
+        <Router>
+          <LicenseGuard>
             <RouteCleanup>
               <AppProvider>
                 <ThemeProvider>
@@ -426,8 +426,8 @@ const App = () => {
                 </ThemeProvider>
               </AppProvider>
             </RouteCleanup>
-          </Router>
-        </LicenseGuard>
+          </LicenseGuard>
+        </Router>
       </TooltipProvider>
     </QueryClientProvider>
   );

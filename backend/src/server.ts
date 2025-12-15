@@ -28,6 +28,10 @@ import employeeRoutes from "./routes/employees.js";
 import expenseCategoryRoutes from "./routes/expense-categories.js";
 import expenseRoutes from "./routes/expenses.js";
 import purchaseRoutes from "./routes/purchases.js";
+import adminRoutes from "./routes/admin.js";
+import adminClientsRoutes from "./routes/admin/clients.js";
+import adminLicensesRoutes from "./routes/admin/licenses.js";
+import adminBranchesRoutes from "./routes/admin/branches.js";
 
 const fastify = Fastify({
   logger: logger,
@@ -129,6 +133,12 @@ async function registerRoutes() {
   await fastify.register(purchaseRoutes, {
     prefix: `${env.API_PREFIX}/purchases`,
   });
+
+  // Admin routes
+  await fastify.register(adminRoutes, { prefix: `${env.API_PREFIX}/admin` });
+  await fastify.register(adminClientsRoutes, { prefix: `${env.API_PREFIX}/admin/clients` });
+  await fastify.register(adminLicensesRoutes, { prefix: `${env.API_PREFIX}/admin/licenses` });
+  await fastify.register(adminBranchesRoutes, { prefix: `${env.API_PREFIX}/admin/branches` });
 
   logger.info("✅ All routes registered successfully");
 }

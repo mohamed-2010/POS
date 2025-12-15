@@ -58,7 +58,8 @@ class WebSocketSyncServer {
 
   private handleConnection(connection: any, req: any): void {
     let deviceId: string | null = null;
-    const socket: WebSocket = connection.socket;
+    // Handle both registration styles - connection.socket for nested register, connection directly for fastify.get
+    const socket: WebSocket = connection.socket || connection;
 
     try {
       const url = new URL(req.url, `ws://${req.headers.host}`);
