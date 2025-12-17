@@ -21,7 +21,7 @@ const ALGORITHM = "aes-256-gcm";
 
 // ==================== License Server Configuration ====================
 // استخدام Backend المحلي - استخدم 127.0.0.1 بدل localhost لتجنب مشاكل IPv6
-const LICENSE_SERVER_URL = "http://127.0.0.1:3030/api/license";
+const LICENSE_SERVER_URL = "https://pos.api.zimflo.com/api/license";
 // فعّل التحقق من السيرفر
 const USE_ONLINE_VALIDATION = true;
 
@@ -81,7 +81,7 @@ function getHardwareInfo(): HardwareInfo {
           .trim()
           .replace(/"/g, "");
         cpuId += `-${serial}`;
-      } catch {}
+      } catch { }
     } else {
       cpuId = execSync("cat /proc/cpuinfo | grep 'Serial' | awk '{print $3}'", {
         encoding: "utf8",
