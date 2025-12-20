@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("license:deactivate", confirmationCode),
     getData: () => ipcRenderer.invoke("license:get-data"),
     generateKey: () => ipcRenderer.invoke("license:generate-key"),
+    // NEW: Get sync credentials for API authentication
+    getSyncCredentials: () => ipcRenderer.invoke("license:get-sync-credentials"),
   },
 
   // WhatsApp APIs
@@ -125,6 +127,22 @@ declare global {
           };
         }>;
         generateKey: () => Promise<string | null>;
+        // Sync credentials and settings for API auth
+        getSyncCredentials: () => Promise<{
+          success: boolean;
+          // Credentials
+          clientId?: string;
+          branchId?: string;
+          syncToken?: string;
+          merchantName?: string;
+          // Settings
+          syncInterval?: number;
+          enableSync?: boolean;
+          enableOfflineMode?: boolean;
+          autoUpdate?: boolean;
+          // Error
+          message?: string;
+        }>;
       };
       whatsapp: {
         initAccount: (

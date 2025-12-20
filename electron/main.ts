@@ -8,6 +8,10 @@ import {
   registerLicenseHandlers,
   verifyLicense,
 } from "./handlers/licenseManager.js";
+import {
+  initAutoUpdater,
+  registerAutoUpdaterHandlers,
+} from "./handlers/autoUpdater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -131,7 +135,14 @@ if (!gotTheLock) {
     registerLicenseHandlers();
     // Register WhatsApp IPC handlers
     registerWhatsAppHandlers();
+    // Register Auto-Update IPC handlers
+    registerAutoUpdaterHandlers();
+    // Create main window
     createWindow();
+    // Initialize auto-updater with main window (only in production)
+    if (mainWindow) {
+      initAutoUpdater(mainWindow);
+    }
   });
 
   // عند إغلاق جميع النوافذ

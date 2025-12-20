@@ -839,8 +839,8 @@ const POSv2 = () => {
     toast({
       title: "تم تطبيق العرض",
       description: `${promotion.name} - ${promotion.discountType === "percentage"
-          ? `${promotion.discountValue}%`
-          : `${promotion.discountValue} جنيه`
+        ? `${promotion.discountValue}%`
+        : `${promotion.discountValue} جنيه`
         }`,
     });
   };
@@ -983,6 +983,9 @@ const POSv2 = () => {
       let paymentMethodIds: string[] = [];
       let paymentMethodAmounts: Record<string, number> = {};
 
+      // لحساب المبلغ المدفوع الفعلي
+      let actualPaid = paid;
+
       if (splitPaymentMode && paymentSplits.length > 0) {
         // الدفع المقسم - استخدام طرق دفع متعددة
         paymentSplits.forEach((split) => {
@@ -1000,10 +1003,18 @@ const POSv2 = () => {
             ?.id ||
           "";
 
-        // حفظ طريقة الدفع حتى لو كان المبلغ المدفوع صفر (للفواتير الآجلة)
         if (paymentMethodId) {
           paymentMethodIds = [paymentMethodId];
-          paymentMethodAmounts = { [paymentMethodId]: paid };
+
+          // للفاتورة النقدية: لو طريقة الدفع متحددة، المدفوع = الإجمالي
+          // للفاتورة الآجلة أو التقسيط: المدفوع = ما دخله المستخدم
+          if (paymentType === "cash") {
+            actualPaid = total; // الفاتورة النقدية دايماً مدفوعة بالكامل
+            paymentMethodAmounts = { [paymentMethodId]: total };
+          } else {
+            // آجل أو تقسيط - استخدم المبلغ المدخل
+            paymentMethodAmounts = { [paymentMethodId]: paid };
+          }
         }
       }
 
@@ -1030,9 +1041,9 @@ const POSv2 = () => {
         tax,
         total,
         paymentType,
-        paymentStatus: paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid",
-        paidAmount: paid,
-        remainingAmount: Math.max(0, total - paid),
+        paymentStatus: actualPaid >= total ? "paid" : actualPaid > 0 ? "partial" : "unpaid",
+        paidAmount: actualPaid,
+        remainingAmount: Math.max(0, total - actualPaid),
         paymentMethodIds,
         paymentMethodAmounts,
         userId: user.id,
@@ -1063,7 +1074,32 @@ const POSv2 = () => {
         shiftId: contextShift.id,
       });
 
+      // Save invoice items to separate store for sync
+      // Each item gets its own record with invoiceId reference
+      const invoiceItemsToSave = cartItems.map((i, index) => ({
+        id: `${newInvoiceNumber}_${index}_${Date.now()}`,
+        invoiceId: newInvoiceNumber,
+        productId: i.id,
+        productName: i.nameAr,
+        quantity: i.quantity,
+        price: i.customPrice || i.price,
+        total: (i.customPrice || i.price) * i.quantity,
+        unitId: i.unitId || "",
+        unitName: i.unitName || "",
+        conversionFactor: i.conversionFactor || 1,
+        priceTypeId: i.priceTypeId || "",
+        priceTypeName: i.priceTypeName || "",
+        productUnitId: i.productUnitId,
+        selectedUnitName: i.selectedUnitName,
+        createdAt: new Date().toISOString(),
+      }));
+
+      for (const item of invoiceItemsToSave) {
+        await db.add("invoiceItems", item);
+      }
+
       console.log("📝 Invoice saved:", invoice);
+      console.log("📦 Invoice items saved separately:", invoiceItemsToSave.length);
       console.log("🔑 Invoice shiftId:", invoice.shiftId);
       console.log("💳 Payment Method IDs:", paymentMethodIds);
       console.log("💰 Payment Method Amounts:", paymentMethodAmounts);
@@ -1972,8 +2008,8 @@ const POSv2 = () => {
                         {paid > 0 && (
                           <div
                             className={`text-center p-3 rounded ${change >= 0
-                                ? "bg-green-100 text-green-900"
-                                : "bg-red-100 text-red-900"
+                              ? "bg-green-100 text-green-900"
+                              : "bg-red-100 text-red-900"
                               }`}
                           >
                             <div className="text-xs">
@@ -2210,8 +2246,8 @@ const POSv2 = () => {
                 <Card
                   key={promo.id}
                   className={`p-4 cursor-pointer hover:border-green-500 transition-all ${selectedPromotion === promo.id
-                      ? "border-green-500 bg-green-50"
-                      : ""
+                    ? "border-green-500 bg-green-50"
+                    : ""
                     }`}
                   onClick={() => applyPromotion(promo.id)}
                 >

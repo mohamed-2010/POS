@@ -32,6 +32,7 @@ import adminRoutes from "./routes/admin.js";
 import adminClientsRoutes from "./routes/admin/clients.js";
 import adminLicensesRoutes from "./routes/admin/licenses.js";
 import adminBranchesRoutes from "./routes/admin/branches.js";
+import updateRoutes from "./routes/updates.js";
 
 const fastify = Fastify({
   logger: logger,
@@ -139,6 +140,9 @@ async function registerRoutes() {
   await fastify.register(adminClientsRoutes, { prefix: `${env.API_PREFIX}/admin/clients` });
   await fastify.register(adminLicensesRoutes, { prefix: `${env.API_PREFIX}/admin/licenses` });
   await fastify.register(adminBranchesRoutes, { prefix: `${env.API_PREFIX}/admin/branches` });
+
+  // App Updates routes
+  await fastify.register(updateRoutes, { prefix: `${env.API_PREFIX}/updates` });
 
   logger.info("✅ All routes registered successfully");
 }

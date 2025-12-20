@@ -29,6 +29,15 @@ export const STORES_SCHEMA: StoreConfig[] = [
     ],
   },
   {
+    name: "invoiceItems",
+    keyPath: "id",
+    indexes: [
+      { name: "invoiceId", keyPath: "invoiceId", unique: false },
+      { name: "productId", keyPath: "productId", unique: false },
+      { name: "createdAt", keyPath: "createdAt", unique: false },
+    ],
+  },
+  {
     name: "payments",
     keyPath: "id",
     indexes: [

@@ -50,16 +50,36 @@ interface License {
   grace_period_ends_at: Date | null;
   is_active: boolean;
   max_devices: number;
+  // Sync settings
+  sync_interval: number | null;
+  enable_sync: boolean | null;
+  enable_offline_mode: boolean | null;
+  auto_update: boolean | null;
 }
 
-// Generate license key (format: XXXX-XXXX-XXXX-XXXX-XXXX)
+// مفتاح التشفير السري - يجب أن يكون نفس المفتاح في الـ Electron
+const ENCRYPTION_SECRET = "MASR-POS-2024-SECURE-KEY-@#$%^&*";
+
+// Generate license key (format: XXXX-XXXX-XXXX-XXXX) with checksum
+// متوافق مع خوارزمية الـ Electron
 function generateLicenseKey(): string {
-  const segments = [];
-  for (let i = 0; i < 5; i++) {
-    const segment = crypto.randomBytes(2).toString("hex").toUpperCase();
-    segments.push(segment);
-  }
-  return segments.join("-");
+  // توليد 12 حرف عشوائي
+  const randomPart = crypto
+    .randomBytes(6)
+    .toString("hex")
+    .toUpperCase()
+    .substring(0, 12);
+
+  // حساب الـ checksum (آخر 4 أحرف)
+  const hash = crypto
+    .createHash("md5")
+    .update(randomPart + ENCRYPTION_SECRET)
+    .digest("hex");
+  const checksum = hash.substring(0, 4).toUpperCase();
+
+  // تنسيق المفتاح على شكل XXXX-XXXX-XXXX-XXXX
+  const fullKey = randomPart + checksum;
+  return fullKey.match(/.{1,4}/g)?.join("-") || fullKey;
 }
 
 // Generate confirmation code for deactivation
@@ -141,12 +161,39 @@ export default async function licenseRoutes(fastify: FastifyInstance) {
           [body.deviceId, now, now, gracePeriodEnds, body.licenseKey]
         );
 
-        // Send alert (only if clientId provided)
-        if (body.clientId) {
+        // Send alert (only if clientId provided or from license)
+        const clientIdToUse = license.client_id;
+        if (clientIdToUse) {
           await AlertService.sendLicenseAlert(
-            body.clientId,
+            clientIdToUse,
             `License ${body.licenseKey} activated on device ${body.deviceId}`
           );
+        }
+
+        // Generate sync token for API authentication
+        const syncTokenPayload = {
+          licenseKey: license.license_key,
+          clientId: license.client_id,
+          branchId: license.branch_id,
+          deviceId: body.deviceId,
+          type: "sync" as const,
+        };
+        const syncToken = fastify.jwt.sign(syncTokenPayload, { expiresIn: "365d" });
+
+        // Get client name if available
+        let merchantName = body.customerName || null;
+        if (license.client_id) {
+          try {
+            const clients = await query<{ name: string }>(
+              "SELECT name FROM clients WHERE id = ? LIMIT 1",
+              [license.client_id]
+            );
+            if (clients.length > 0) {
+              merchantName = clients[0].name;
+            }
+          } catch (e) {
+            // Ignore if clients table doesn't exist
+          }
         }
 
         return reply.send({
@@ -156,6 +203,16 @@ export default async function licenseRoutes(fastify: FastifyInstance) {
           activatedAt: now.toISOString(),
           expiresAt: license.expires_at?.toISOString() || null,
           gracePeriodEndsAt: gracePeriodEnds.toISOString(),
+          // Sync credentials
+          clientId: license.client_id,
+          branchId: license.branch_id,
+          syncToken: syncToken,
+          merchantName: merchantName,
+          // Sync settings (from license record)
+          syncInterval: license.sync_interval ?? 300000, // default 5 min
+          enableSync: license.enable_sync ?? true,
+          enableOfflineMode: license.enable_offline_mode ?? false,
+          autoUpdate: license.auto_update ?? true,
         });
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -221,9 +278,9 @@ export default async function licenseRoutes(fastify: FastifyInstance) {
         // Check if needs verification (30 days since last verify)
         const daysSinceVerification = license.last_verified_at
           ? Math.floor(
-              (Date.now() - new Date(license.last_verified_at).getTime()) /
-                (1000 * 60 * 60 * 24)
-            )
+            (Date.now() - new Date(license.last_verified_at).getTime()) /
+            (1000 * 60 * 60 * 24)
+          )
           : 999;
 
         if (daysSinceVerification > env.LICENSE_VERIFICATION_INTERVAL_DAYS) {
@@ -239,8 +296,35 @@ export default async function licenseRoutes(fastify: FastifyInstance) {
           license.grace_period_ends_at &&
           new Date() <= new Date(license.grace_period_ends_at);
 
+        // Generate fresh sync token for API authentication
+        const syncTokenPayload = {
+          licenseKey: license.license_key,
+          clientId: license.client_id,
+          branchId: license.branch_id,
+          deviceId: body.deviceId,
+          type: "sync" as const,
+        };
+        const syncToken = fastify.jwt.sign(syncTokenPayload, { expiresIn: "365d" });
+
+        // Get merchant name if available
+        let merchantName = null;
+        if (license.client_id) {
+          try {
+            const clients = await query<{ name: string }>(
+              "SELECT name FROM clients WHERE id = ? LIMIT 1",
+              [license.client_id]
+            );
+            if (clients.length > 0) {
+              merchantName = clients[0].name;
+            }
+          } catch (e) {
+            // Ignore if clients table doesn't exist
+          }
+        }
+
         return reply.send({
           valid: true,
+          success: true,
           message: "License is valid",
           licenseKey: license.license_key,
           deviceId: license.device_id,
@@ -249,6 +333,16 @@ export default async function licenseRoutes(fastify: FastifyInstance) {
           lastVerifiedAt: new Date().toISOString(),
           inGracePeriod,
           gracePeriodEndsAt: license.grace_period_ends_at,
+          // Sync credentials (always refresh on verify)
+          clientId: license.client_id,
+          branchId: license.branch_id,
+          syncToken: syncToken,
+          merchantName: merchantName,
+          // Sync settings
+          syncInterval: license.sync_interval ?? 300000,
+          enableSync: license.enable_sync ?? true,
+          enableOfflineMode: license.enable_offline_mode ?? false,
+          autoUpdate: license.auto_update ?? true,
         });
       } catch (error) {
         if (error instanceof z.ZodError) {

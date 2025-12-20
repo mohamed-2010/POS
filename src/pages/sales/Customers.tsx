@@ -14,6 +14,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   UserPlus,
   Phone,
@@ -24,13 +31,16 @@ import {
   Trash2,
   DollarSign,
 } from "lucide-react";
-import { db, Customer, Invoice } from "@/shared/lib/indexedDB";
+import { db, Customer, Invoice, PaymentMethod } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import { useSettingsContext } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useShift } from "@/contexts/ShiftContext";
+import { CustomerDetailsDialog } from "@/components/dialogs/CustomerDetailsDialog";
 
 const Customers = () => {
   const { can } = useAuth();
+  const { currentShift } = useShift();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -38,6 +48,10 @@ const Customers = () => {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [payingCustomer, setPayingCustomer] = useState<Customer | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -50,11 +64,17 @@ const Customers = () => {
 
   useEffect(() => {
     loadCustomers();
+    loadPaymentMethods();
   }, []);
 
   const loadCustomers = async () => {
     const data = await db.getAll<Customer>("customers");
     setCustomers(data);
+  };
+
+  const loadPaymentMethods = async () => {
+    const methods = await db.getAll<PaymentMethod>("paymentMethods");
+    setPaymentMethods(methods.filter((m) => m.isActive));
   };
 
   const filteredCustomers = customers.filter(
@@ -185,6 +205,9 @@ const Customers = () => {
   const openPaymentDialog = (customer: Customer) => {
     setPayingCustomer(customer);
     setPaymentAmount("");
+    // Set default payment method to cash
+    const cashMethod = paymentMethods.find((m) => m.type === "cash");
+    setSelectedPaymentMethodId(cashMethod?.id || paymentMethods[0]?.id || "");
     setIsPaymentDialogOpen(true);
   };
 
@@ -199,6 +222,11 @@ const Customers = () => {
 
     if (amount > payingCustomer.currentBalance) {
       toast.error("المبلغ المدخل أكبر من رصيد العميل");
+      return;
+    }
+
+    if (!selectedPaymentMethodId) {
+      toast.error("الرجاء اختيار طريقة الدفع");
       return;
     }
 
@@ -249,12 +277,62 @@ const Customers = () => {
       };
       await db.update("customers", updatedCustomer);
 
+      // إنشاء سجل دفع للتتبع في التقارير اليومية
+      const selectedMethod = paymentMethods.find(
+        (m) => m.id === selectedPaymentMethodId
+      );
+      const paymentRecord = {
+        id: `credit_payment_${Date.now()}`,
+        customerId: payingCustomer.id,
+        customerName: payingCustomer.name,
+        amount: amount,
+        paymentMethodId: selectedPaymentMethodId,
+        paymentMethodName: selectedMethod?.name || "غير محدد",
+        paymentType: "credit_payment",
+        shiftId: currentShift?.id,
+        createdAt: new Date().toISOString(),
+      };
+      await db.add("payments", paymentRecord);
+
+      // تحديث بيانات الوردية إذا كانت موجودة
+      if (currentShift) {
+        const shift = await db.get<any>("shifts", currentShift.id);
+        if (shift) {
+          // تحديث المبيعات حسب طريقة الدفع
+          const updatedShift = { ...shift };
+          if (selectedMethod?.type === "cash") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cashSales: (updatedShift.sales?.cashSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (
+            selectedMethod?.type === "visa" ||
+            selectedMethod?.type === "bank_transfer"
+          ) {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cardSales: (updatedShift.sales?.cardSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (selectedMethod?.type === "wallet") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              walletSales: (updatedShift.sales?.walletSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          }
+          await db.update("shifts", updatedShift);
+        }
+      }
+
       toast.success(`تم تسديد ${amount.toFixed(2)} ${currency} من رصيد العميل`);
       loadCustomers();
       setIsPaymentDialogOpen(false);
       setPayingCustomer(null);
       setPaymentAmount("");
     } catch (error) {
+      console.error("Payment error:", error);
       toast.error("حدث خطأ أثناء تسجيل الدفعة");
     }
   };
@@ -423,7 +501,11 @@ const Customers = () => {
           {filteredCustomers.map((customer) => (
             <Card
               key={customer.id}
-              className="hover:shadow-lg transition-shadow"
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => {
+                setSelectedCustomerForDetails(customer);
+                setIsDetailsDialogOpen(true);
+              }}
             >
               <CardHeader>
                 <CardTitle className="flex justify-between items-start">
@@ -433,7 +515,10 @@ const Customers = () => {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => handleEdit(customer)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(customer);
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -442,7 +527,10 @@ const Customers = () => {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => handleDelete(customer.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(customer.id);
+                        }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -468,11 +556,10 @@ const Customers = () => {
                       <span>الرصيد الحالي</span>
                     </div>
                     <p
-                      className={`text-lg font-bold ${
-                        customer.currentBalance > 0
-                          ? "text-destructive"
-                          : "text-success"
-                      }`}
+                      className={`text-lg font-bold ${customer.currentBalance > 0
+                        ? "text-destructive"
+                        : "text-success"
+                        }`}
                     >
                       {customer.currentBalance.toFixed(2)} {currency}
                     </p>
@@ -498,7 +585,10 @@ const Customers = () => {
                   <div className="pt-3 border-t">
                     <Button
                       size="sm"
-                      onClick={() => openPaymentDialog(customer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPaymentDialog(customer);
+                      }}
                       className="w-full gap-2"
                       variant="outline"
                     >
@@ -563,6 +653,26 @@ const Customers = () => {
                 </p>
               </div>
 
+              {/* اختيار طريقة الدفع */}
+              <div className="space-y-2">
+                <Label>طريقة الدفع</Label>
+                <Select
+                  value={selectedPaymentMethodId}
+                  onValueChange={setSelectedPaymentMethodId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر طريقة الدفع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="customer-payment-amount">مبلغ الدفعة</Label>
                 <Input
@@ -609,6 +719,13 @@ const Customers = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Customer Details Dialog */}
+      <CustomerDetailsDialog
+        open={isDetailsDialogOpen}
+        onOpenChange={setIsDetailsDialogOpen}
+        customer={selectedCustomerForDetails}
+      />
     </div>
   );
 };

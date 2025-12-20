@@ -170,8 +170,7 @@ const Shifts = () => {
 
       if (difference !== 0) {
         toast.warning(
-          `تم إغلاق الوردية. فرق: ${Math.abs(difference).toFixed(2)} ${
-            difference > 0 ? "زيادة" : "نقص"
+          `تم إغلاق الوردية. فرق: ${Math.abs(difference).toFixed(2)} ${difference > 0 ? "زيادة" : "نقص"
           }`
         );
       } else {
@@ -213,19 +212,19 @@ const Shifts = () => {
           </div>
           {!currentShift
             ? can("shifts", "open") && (
-                <Button onClick={() => setIsStartDialogOpen(true)} size="lg">
-                  بدء وردية جديدة
-                </Button>
-              )
+              <Button onClick={() => setIsStartDialogOpen(true)} size="lg">
+                بدء وردية جديدة
+              </Button>
+            )
             : can("shifts", "close") && (
-                <Button
-                  onClick={() => setIsZReportOpen(true)}
-                  variant="destructive"
-                  size="lg"
-                >
-                  إغلاق الوردية
-                </Button>
-              )}
+              <Button
+                onClick={() => setIsZReportOpen(true)}
+                variant="destructive"
+                size="lg"
+              >
+                إغلاق الوردية
+              </Button>
+            )}
         </div>
 
         {/* الوردية الحالية */}
@@ -302,7 +301,7 @@ const Shifts = () => {
                   variant="outline"
                 >
                   <FileText className="ml-2 h-4 w-4" />
-                  تقرير X (منتصف الوردية)
+                  التقرير
                 </Button>
               )}
             </div>
@@ -316,9 +315,8 @@ const Shifts = () => {
             {shifts.map((shift) => (
               <Card
                 key={shift.id}
-                className={`p-4 ${
-                  shift.status === "active" ? "border-primary bg-primary/5" : ""
-                }`}
+                className={`p-4 ${shift.status === "active" ? "border-primary bg-primary/5" : ""
+                  }`}
               >
                 <div className="grid md:grid-cols-5 gap-4">
                   <div>
@@ -357,11 +355,10 @@ const Shifts = () => {
                         {shift.difference !== undefined &&
                           shift.difference !== 0 && (
                             <span
-                              className={`text-xs font-bold ${
-                                shift.difference > 0
-                                  ? "text-green-600"
-                                  : "text-red-600"
-                              }`}
+                              className={`text-xs font-bold ${shift.difference > 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                                }`}
                             >
                               {shift.difference > 0 ? "+" : ""}
                               {formatCurrency(shift.difference)}
@@ -390,13 +387,12 @@ const Shifts = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">الفرق</p>
                         <p
-                          className={`font-bold ${
-                            (shift.difference || 0) > 0
-                              ? "text-green-600"
-                              : (shift.difference || 0) < 0
+                          className={`font-bold ${(shift.difference || 0) > 0
+                            ? "text-green-600"
+                            : (shift.difference || 0) < 0
                               ? "text-red-600"
                               : "text-gray-600"
-                          }`}
+                            }`}
                         >
                           {formatCurrency(shift.difference || 0)}
                         </p>
@@ -471,11 +467,12 @@ const Shifts = () => {
           }}
         />
 
-        {/* حوار تقرير X */}
-        <XReportDialog
+
+        <ZReportDialog
           open={isXReportOpen}
           onOpenChange={setIsXReportOpen}
-          shiftId={currentShift?.id ? Number(currentShift.id) : 0}
+          shiftId={currentShift.id}
+          onConfirm={handleCloseShiftFromZReport}
         />
 
         {/* حوار تقرير Z - إغلاق الوردية */}

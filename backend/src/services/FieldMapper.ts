@@ -24,13 +24,15 @@ function skipBase64(val: string): string | null {
     return val;
 }
 
-// Helper: Validate ID format (UUID or numeric)
+// Helper: Validate ID format (UUID, numeric, or compound IDs with underscores)
 function validateId(val: string): string | null {
     if (!val) return null;
     // UUID format
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return val;
     // Numeric ID
     if (/^\d+$/.test(val)) return val;
+    // Compound ID with underscores (e.g., 1763927275416_fu3ulz97e or default-unit)
+    if (/^[a-zA-Z0-9_-]+$/.test(val)) return val;
     // Otherwise skip
     return null;
 }
@@ -297,6 +299,67 @@ const PAYMENTS_MAPPING: TableMapping = {
     clientOnlyFields: ['local_updated_at'],
 };
 
+// Settings - MySQL: id, setting_key, setting_value, setting_group, description
+const SETTINGS_MAPPING: TableMapping = {
+    fields: [
+        { clientField: 'key', serverField: 'setting_key' },
+        { clientField: 'value', serverField: 'setting_value' },
+        { clientField: 'category', serverField: 'setting_group', defaultValue: 'general' },
+        { clientField: 'description', serverField: 'description' },
+        { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+        { clientField: 'updatedAt', serverField: 'updated_at', transform: toMySQLDateTime },
+    ],
+    clientOnlyFields: ['local_updated_at'],
+};
+
+// Payment Methods - MySQL: name, name_en, type, active, sort_order
+const PAYMENT_METHODS_MAPPING: TableMapping = {
+    fields: [
+        { clientField: 'id', serverField: 'id' },
+        { clientField: 'name', serverField: 'name' },
+        { clientField: 'nameEn', serverField: 'name_en' },
+        { clientField: 'type', serverField: 'type', defaultValue: 'cash' },
+        { clientField: 'active', serverField: 'active', defaultValue: 1 },
+        { clientField: 'sortOrder', serverField: 'sort_order', defaultValue: 0 },
+        { clientField: 'createdBy', serverField: 'created_by' },
+        { clientField: 'updatedBy', serverField: 'updated_by' },
+        { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+        { clientField: 'updatedAt', serverField: 'updated_at', transform: toMySQLDateTime },
+    ],
+    clientOnlyFields: ['local_updated_at'],
+};
+
+// Expense Items - MySQL: category_id, user_id, shift_id, amount, description
+const EXPENSE_ITEMS_MAPPING: TableMapping = {
+    fields: [
+        { clientField: 'id', serverField: 'id' },
+        { clientField: 'categoryId', serverField: 'category_id', transform: validateId },
+        { clientField: 'userId', serverField: 'user_id', transform: validateId },
+        { clientField: 'shiftId', serverField: 'shift_id', transform: validateId },
+        { clientField: 'amount', serverField: 'amount' },
+        { clientField: 'description', serverField: 'description' },
+        { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+    ],
+    clientOnlyFields: ['local_updated_at'],
+};
+
+// Invoice Items - MySQL: invoice_id, product_id, quantity, unit_price, discount, tax, total
+const INVOICE_ITEMS_MAPPING: TableMapping = {
+    fields: [
+        { clientField: 'id', serverField: 'id' },
+        { clientField: 'invoiceId', serverField: 'invoice_id', transform: validateId },
+        { clientField: 'productId', serverField: 'product_id', transform: validateId },
+        { clientField: 'quantity', serverField: 'quantity' },
+        { clientField: 'price', serverField: 'unit_price' },
+        { clientField: 'discount', serverField: 'discount', defaultValue: 0 },
+        { clientField: 'tax', serverField: 'tax', defaultValue: 0 },
+        { clientField: 'total', serverField: 'total' },
+        { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+    ],
+    clientOnlyFields: ['local_updated_at', 'productName', 'unitId', 'unitName', 'conversionFactor',
+        'priceTypeId', 'priceTypeName', 'selectedUnitName', 'productUnitId'],
+};
+
 // ==================== MASTER MAPPING REGISTRY ====================
 const TABLE_MAPPINGS: Record<string, TableMapping> = {
     product_categories: PRODUCT_CATEGORIES_MAPPING,
@@ -305,14 +368,63 @@ const TABLE_MAPPINGS: Record<string, TableMapping> = {
     suppliers: SUPPLIERS_MAPPING,
     employees: EMPLOYEES_MAPPING,
     invoices: INVOICES_MAPPING,
+    invoice_items: INVOICE_ITEMS_MAPPING,
     purchases: PURCHASES_MAPPING,
     expenses: EXPENSES_MAPPING,
+    expense_items: EXPENSE_ITEMS_MAPPING,
     shifts: SHIFTS_MAPPING,
     units: UNITS_MAPPING,
     price_types: PRICE_TYPES_MAPPING,
     warehouses: WAREHOUSES_MAPPING,
     audit_logs: AUDIT_LOGS_MAPPING,
     payments: PAYMENTS_MAPPING,
+    payment_methods: PAYMENT_METHODS_MAPPING,
+    settings: SETTINGS_MAPPING,
+    // Product Units - MySQL: product_id, unit_id, barcode, conversion_factor, price
+    product_units: {
+        fields: [
+            { clientField: 'id', serverField: 'id' },
+            { clientField: 'productId', serverField: 'product_id', transform: validateId },
+            { clientField: 'unitId', serverField: 'unit_id', transform: validateId },
+            { clientField: 'barcode', serverField: 'barcode' },
+            { clientField: 'conversionFactor', serverField: 'conversion_factor', defaultValue: 1 },
+            { clientField: 'price', serverField: 'price' },
+            { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+            { clientField: 'updatedAt', serverField: 'updated_at', transform: toMySQLDateTime },
+        ],
+        clientOnlyFields: ['local_updated_at', 'unitName', 'prices'],
+    },
+    // Expense Categories - MySQL: name, name_en, description, active
+    expense_categories: {
+        fields: [
+            { clientField: 'id', serverField: 'id' },
+            { clientField: 'name', serverField: 'name' },
+            { clientField: 'nameEn', serverField: 'name_en' },
+            { clientField: 'description', serverField: 'description' },
+            { clientField: 'active', serverField: 'active', defaultValue: 1 },
+            { clientField: 'createdBy', serverField: 'created_by' },
+            { clientField: 'updatedBy', serverField: 'updated_by' },
+            { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+            { clientField: 'updatedAt', serverField: 'updated_at', transform: toMySQLDateTime },
+        ],
+        clientOnlyFields: ['local_updated_at'],
+    },
+    // Sales Returns - MySQL: original_invoice_id, customer_id, total_amount, reason, status
+    sales_returns: {
+        fields: [
+            { clientField: 'id', serverField: 'id' },
+            { clientField: 'originalInvoiceId', serverField: 'original_invoice_id', transform: validateId },
+            { clientField: 'invoiceId', serverField: 'original_invoice_id', transform: validateId },
+            { clientField: 'customerId', serverField: 'customer_id', transform: validateId },
+            { clientField: 'totalAmount', serverField: 'total_amount' },
+            { clientField: 'total', serverField: 'total_amount' },
+            { clientField: 'reason', serverField: 'reason' },
+            { clientField: 'status', serverField: 'status', defaultValue: 'completed' },
+            { clientField: 'createdAt', serverField: 'created_at', transform: toMySQLDateTime },
+            { clientField: 'updatedAt', serverField: 'updated_at', transform: toMySQLDateTime },
+        ],
+        clientOnlyFields: ['local_updated_at', 'items', 'customerName', 'invoiceNumber'],
+    },
 };
 
 // ==================== Transformation Functions ====================

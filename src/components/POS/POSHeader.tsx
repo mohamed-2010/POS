@@ -269,6 +269,12 @@ export const POSHeader = () => {
           check: () => can("customers", "view"),
         },
         {
+          name: "سجل الفواتير",
+          icon: FileText,
+          path: "/invoices",
+          check: () => can("invoices", "view"),
+        },
+        {
           name: "التقارير",
           icon: FileText,
           path: "/reports",
@@ -442,12 +448,12 @@ export const POSHeader = () => {
           path: "/payment-methods",
           check: () => can("settings", "view"),
         },
-        {
-          name: "إعدادات الطابعة",
-          icon: Printer,
-          path: "/printer-settings",
-          check: () => can("settings", "view"),
-        },
+        // {
+        //   name: "إعدادات الطابعة",
+        //   icon: Printer,
+        //   path: "/printer-settings",
+        //   check: () => can("settings", "view"),
+        // },
       ],
     },
     {
@@ -559,10 +565,10 @@ export const POSHeader = () => {
                     {user?.role === "admin"
                       ? "مدير النظام"
                       : user?.role === "manager"
-                      ? "مدير"
-                      : user?.role === "cashier"
-                      ? "كاشير"
-                      : "محاسب"}
+                        ? "مدير"
+                        : user?.role === "cashier"
+                          ? "كاشير"
+                          : "محاسب"}
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -794,21 +800,19 @@ export const POSHeader = () => {
 
               {/* Net Profit */}
               <div
-                className={`border-2 rounded-lg p-4 ${
-                  dailySummary.netProfit >= 0
-                    ? "bg-emerald-50 border-emerald-400"
-                    : "bg-red-50 border-red-400"
-                }`}
+                className={`border-2 rounded-lg p-4 ${dailySummary.netProfit >= 0
+                  ? "bg-emerald-50 border-emerald-400"
+                  : "bg-red-50 border-red-400"
+                  }`}
               >
                 <h3 className="font-semibold mb-2 text-center">
                   {dailySummary.netProfit >= 0 ? "✅ صافي الربح" : "⚠️ الخسارة"}
                 </h3>
                 <p
-                  className={`text-3xl font-bold text-center ${
-                    dailySummary.netProfit >= 0
-                      ? "text-emerald-600"
-                      : "text-red-600"
-                  }`}
+                  className={`text-3xl font-bold text-center ${dailySummary.netProfit >= 0
+                    ? "text-emerald-600"
+                    : "text-red-600"
+                    }`}
                 >
                   {dailySummary.netProfit.toFixed(2)} جنيه
                 </p>

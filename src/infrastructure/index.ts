@@ -18,6 +18,10 @@ export interface InfrastructureConfig {
   wsURL: string;
   enableSync?: boolean;
   syncInterval?: number;
+  // License-based sync credentials
+  syncToken?: string;
+  clientId?: string;
+  branchId?: string;
 }
 
 let isInitialized = false;
@@ -30,7 +34,12 @@ export async function initializeInfrastructure(
     return;
   }
 
-  console.log("Initializing infrastructure...");
+  console.log("==========================================");
+  console.log("[SYNC DEBUG] Initializing infrastructure...");
+  console.log("[SYNC DEBUG] API URL:", config.apiBaseURL);
+  console.log("[SYNC DEBUG] WS URL:", config.wsURL);
+  console.log("[SYNC DEBUG] Enable Sync:", config.enableSync);
+  console.log("==========================================");
 
   try {
     // Initialize HTTP client
@@ -38,15 +47,30 @@ export async function initializeInfrastructure(
       baseURL: config.apiBaseURL,
       timeout: 30000,
     });
+    console.log("[SYNC DEBUG] HTTP client created");
 
     // Load stored auth tokens
-    httpClient.loadAuth();
+    const authLoaded = httpClient.loadAuth();
+    console.log("[SYNC DEBUG] Auth loaded:", authLoaded);
+
+    // If license sync token provided, use it for authentication
+    if (config.syncToken) {
+      httpClient.setAuth({
+        accessToken: config.syncToken,
+        refreshToken: "", // No refresh for license tokens
+      });
+      console.log("[SYNC DEBUG] ✅ Using license sync token for auth");
+      console.log("[SYNC DEBUG] Client ID:", config.clientId);
+      console.log("[SYNC DEBUG] Branch ID:", config.branchId);
+    } else {
+      console.log("[SYNC DEBUG] Is authenticated:", httpClient.isAuthenticated());
+    }
 
     // Quick connectivity check (non-blocking)
     httpClient
       .get("/api/health")
-      .then(() => console.log("HTTP healthcheck: backend reachable"))
-      .catch((err) => console.warn("HTTP healthcheck failed:", err?.message));
+      .then(() => console.log("[SYNC DEBUG] ✅ Backend reachable"))
+      .catch((err) => console.error("[SYNC DEBUG] ❌ Backend NOT reachable:", err?.message));
 
     // Initialize WebSocket client
     const wsClient = createWebSocketClient({
@@ -57,12 +81,11 @@ export async function initializeInfrastructure(
       heartbeatInterval: 30000,
     });
 
-    // Set auth token for WebSocket if authenticated
-    if (httpClient.isAuthenticated()) {
-      // Get token and set for WebSocket
-      // Note: You'll need to expose a method to get the current token
-      wsClient.connect();
-    }
+    // Always connect WebSocket (will work with or without auth)
+    // In production, auth may not be loaded immediately, so we connect anyway
+    // and the sync will use HTTP calls which also work without WebSocket
+    wsClient.connect();
+    console.log("[Infrastructure] WebSocket connection initiated");
 
     // Initialize Sync Queue
     await createSyncQueue();
@@ -103,6 +126,7 @@ export async function initializeInfrastructure(
       console.log("ServerSyncHandler initialized");
 
       // Initialize Smart Sync Manager for bidirectional sync
+      console.log("[SYNC DEBUG] Initializing SmartSync...");
       const smartSync = initializeSmartSync(httpClient, wsClient, {
         syncInterval: config.syncInterval || 30000, // 30 seconds
         pullOnConnect: true,
@@ -110,35 +134,39 @@ export async function initializeInfrastructure(
         enableRealTime: true,
         batchSize: 50,
       });
+      console.log("[SYNC DEBUG] SmartSync initialized");
 
       // Setup SmartSync event listeners
       smartSync.on('syncComplete', (result) => {
-        console.log('[SmartSync] Sync complete:', result);
+        console.log('[SYNC DEBUG] ✅ Sync complete:', result);
       });
 
       smartSync.on('syncError', (error) => {
-        console.error('[SmartSync] Sync error:', error);
+        console.error('[SYNC DEBUG] ❌ Sync error:', error);
       });
 
       smartSync.on('remoteUpdate', (event) => {
-        console.log('[SmartSync] Remote update received:', event);
+        console.log('[SYNC DEBUG] Remote update received:', event);
       });
 
       smartSync.on('online', () => {
-        console.log('[SmartSync] App is online');
+        console.log('[SYNC DEBUG] App is online');
       });
 
       smartSync.on('offline', () => {
-        console.log('[SmartSync] App is offline');
+        console.log('[SYNC DEBUG] App is offline');
       });
 
       // Start SmartSync (initial full sync + periodic sync)
+      console.log("[SYNC DEBUG] Starting SmartSync...");
       await smartSync.start();
-      console.log('SmartSyncManager initialized and started');
+      console.log('[SYNC DEBUG] ✅ SmartSyncManager started successfully');
     }
 
     isInitialized = true;
-    console.log("Infrastructure initialized successfully");
+    console.log("==========================================");
+    console.log("[SYNC DEBUG] ✅ Infrastructure initialized successfully");
+    console.log("==========================================");
   } catch (error) {
     console.error("Failed to initialize infrastructure:", error);
     throw error;

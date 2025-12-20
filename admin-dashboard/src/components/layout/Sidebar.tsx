@@ -15,6 +15,7 @@ import {
     Monitor,
     ChevronLeft,
     LogOut,
+    Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +29,7 @@ const navigation = [
     { name: 'الفروع', href: '/branches', icon: Building2 },
     { name: 'التراخيص', href: '/licenses', icon: Key },
     { name: 'الاشتراكات', href: '/subscriptions', icon: CreditCard },
+    { name: 'التحديثات', href: '/updates', icon: Download },
     { name: 'التقارير', href: '/reports', icon: BarChart3 },
     { name: 'مراقبة النظام', href: '/system', icon: Monitor },
     { name: 'الإعدادات', href: '/settings', icon: Settings },

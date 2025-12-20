@@ -185,6 +185,8 @@ const Settings = () => {
         customers: await db.getAll("customers"),
         suppliers: await db.getAll("suppliers"),
         invoices: await db.getAll("invoices"),
+        invoiceItems: await db.getAll("invoiceItems"),
+        payments: await db.getAll("payments"),
         shifts: await db.getAll("shifts"),
         expenseItems: await db.getAll("expenseItems"),
         expenseCategories: await db.getAll("expenseCategories"),
@@ -197,7 +199,7 @@ const Settings = () => {
         paymentMethods: await db.getAll("paymentMethods"),
         settings: await db.getAll("settings"),
         exportDate: new Date().toISOString(),
-        version: "1.0",
+        version: "2.0", // Updated version for new schema
       };
 
       const json = JSON.stringify(allData, null, 2);
@@ -264,6 +266,8 @@ const Settings = () => {
         "customers",
         "suppliers",
         "invoices",
+        "invoiceItems",
+        "payments",
         "shifts",
         "expenseItems",
         "expenseCategories",
@@ -289,13 +293,64 @@ const Settings = () => {
         }
       }
 
+      // Backward compatibility: If old backup without invoiceItems,
+      // extract items from invoices and save to invoiceItems
+      if (!data.invoiceItems && data.invoices && Array.isArray(data.invoices)) {
+        await db.clear("invoiceItems");
+        for (const invoice of data.invoices) {
+          if (invoice.items && Array.isArray(invoice.items)) {
+            for (let idx = 0; idx < invoice.items.length; idx++) {
+              const item = invoice.items[idx];
+              const invoiceItem = {
+                id: `${invoice.id}_${idx}_${Date.now()}`,
+                invoiceId: invoice.id,
+                productId: item.productId,
+                productName: item.productName,
+                quantity: item.quantity,
+                price: item.price,
+                total: item.total,
+                unitId: item.unitId || "",
+                unitName: item.unitName || "",
+                conversionFactor: item.conversionFactor || 1,
+                priceTypeId: item.priceTypeId || "",
+                priceTypeName: item.priceTypeName || "",
+                productUnitId: item.productUnitId,
+                selectedUnitName: item.selectedUnitName,
+                createdAt: invoice.createdAt || new Date().toISOString(),
+              };
+              await db.add("invoiceItems", invoiceItem);
+            }
+          }
+        }
+        console.log("[Import] Extracted invoice items from old backup format");
+      }
+
       toast({
         title: "تم استيراد البيانات بنجاح",
-        description: "تم استعادة جميع البيانات من النسخة الاحتياطية",
+        description: "جاري مزامنة البيانات مع الخادم...",
       });
 
+      // Trigger full sync to push restored data to backend
+      try {
+        const { getSmartSync } = await import("@/infrastructure");
+        const smartSync = getSmartSync();
+        await smartSync.performFullSync();
+        console.log("[Restore] Full sync completed after restore");
+        toast({
+          title: "تمت المزامنة",
+          description: "تم مزامنة البيانات المستعادة مع الخادم بنجاح",
+        });
+      } catch (syncError) {
+        console.warn("[Restore] Sync after restore failed:", syncError);
+        toast({
+          title: "تحذير",
+          description: "تم استيراد البيانات لكن فشلت المزامنة مع الخادم",
+          variant: "destructive",
+        });
+      }
+
       // Reload page to refresh all data
-      setTimeout(() => window.location.reload(), 1000);
+      setTimeout(() => window.location.reload(), 1500);
     } catch (error) {
       console.error("Import error:", error);
       toast({
@@ -368,8 +423,8 @@ const Settings = () => {
 
     const confirmed = window.confirm(
       "⚠️ تحذير: سيتم حذف قاعدة البيانات القديمة وإنشاء واحدة جديدة!\n\n" +
-        "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
-        "هل أنت متأكد؟"
+      "هذا سيحل مشكلة الـ object stores المفقودة.\n\n" +
+      "هل أنت متأكد؟"
     );
 
     if (!confirmed) return;
@@ -543,40 +598,36 @@ const Settings = () => {
                   </Label>
                   <div className="grid grid-cols-2 gap-4">
                     <Card
-                      className={`p- 4 cursor - pointer transition - all border - 2 ${
-                        mode === "light"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
+                      className={`p- 4 cursor - pointer transition - all border - 2 ${mode === "light"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                        }`}
                       onClick={() => setMode("light")}
                     >
                       <div className="flex flex-col items-center gap-2">
                         <Sun
-                          className={`h - 8 w - 8 ${
-                            mode === "light"
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          } `}
+                          className={`h - 8 w - 8 ${mode === "light"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                            } `}
                         />
                         <span className="font-semibold">الوضع النهاري</span>
                       </div>
                     </Card>
 
                     <Card
-                      className={`p - 4 cursor - pointer transition - all border - 2 ${
-                        mode === "dark"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      } `}
+                      className={`p - 4 cursor - pointer transition - all border - 2 ${mode === "dark"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                        } `}
                       onClick={() => setMode("dark")}
                     >
                       <div className="flex flex-col items-center gap-2">
                         <Moon
-                          className={`h - 8 w - 8 ${
-                            mode === "dark"
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          } `}
+                          className={`h - 8 w - 8 ${mode === "dark"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                            } `}
                         />
                         <span className="font-semibold">الوضع الليلي</span>
                       </div>
@@ -771,11 +822,10 @@ const Settings = () => {
                 <div className="space-y-6">
                   {/* License Status */}
                   <div
-                    className={`p-4 rounded-lg border ${
-                      licenseData?.valid
-                        ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800"
-                        : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800"
-                    }`}
+                    className={`p-4 rounded-lg border ${licenseData?.valid
+                      ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800"
+                      : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800"
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       {licenseData?.valid ? (
@@ -784,11 +834,10 @@ const Settings = () => {
                         <XCircle className="h-5 w-5 text-red-500" />
                       )}
                       <span
-                        className={`font-bold ${
-                          licenseData?.valid
-                            ? "text-green-700 dark:text-green-300"
-                            : "text-red-700 dark:text-red-300"
-                        }`}
+                        className={`font-bold ${licenseData?.valid
+                          ? "text-green-700 dark:text-green-300"
+                          : "text-red-700 dark:text-red-300"
+                          }`}
                       >
                         {licenseData?.valid
                           ? "✅ الترخيص مُفعّل"
@@ -796,11 +845,10 @@ const Settings = () => {
                       </span>
                     </div>
                     <p
-                      className={`text-sm mt-1 ${
-                        licenseData?.valid
-                          ? "text-green-600 dark:text-green-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
+                      className={`text-sm mt-1 ${licenseData?.valid
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                        }`}
                     >
                       {licenseData?.message}
                     </p>

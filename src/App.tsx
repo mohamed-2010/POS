@@ -29,6 +29,7 @@ import NotFound from "./pages/auth/NotFound";
 
 // Sales Pages
 import Customers from "./pages/sales/Customers";
+import Invoices from "./pages/sales/Invoices";
 import SalesReturns from "./pages/sales/SalesReturns";
 import Promotions from "./pages/sales/Promotions";
 
@@ -191,6 +192,14 @@ const App = () => {
                             element={
                               <ProtectedRoute>
                                 <Customers />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/invoices"
+                            element={
+                              <ProtectedRoute>
+                                <Invoices />
                               </ProtectedRoute>
                             }
                           />

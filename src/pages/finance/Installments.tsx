@@ -17,23 +17,37 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { POSHeader } from "@/components/POS/POSHeader";
 import {
   db,
   Invoice,
   InstallmentPayment,
   Customer,
+  PaymentMethod,
 } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useShift } from "@/contexts/ShiftContext";
 
 export default function Installments() {
   const { can } = useAuth();
+  const { currentShift } = useShift();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
+  const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null);
 
   useEffect(() => {
     loadInstallments();
@@ -45,6 +59,10 @@ export default function Installments() {
       (inv) => inv.paymentType === "installment" && inv.installmentPlan
     );
     setInvoices(installmentInvoices);
+
+    // Load payment methods
+    const methods = await db.getAll<PaymentMethod>("paymentMethods");
+    setPaymentMethods(methods.filter((m) => m.isActive));
   };
 
   const handlePayInstallment = async (
@@ -53,50 +71,113 @@ export default function Installments() {
   ) => {
     if (!invoice.installmentPlan) return;
 
-    const updatedPlan = { ...invoice.installmentPlan };
-    const paymentIndex = updatedPlan.payments.findIndex(
-      (p) => p.id === installmentId
-    );
-
-    if (paymentIndex === -1) return;
-
-    updatedPlan.payments[paymentIndex] = {
-      ...updatedPlan.payments[paymentIndex],
-      paid: true,
-      paidDate: new Date().toISOString(),
-    };
-
-    const paidAmount = updatedPlan.payments
-      .filter((p) => p.paid)
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const updatedInvoice: Invoice = {
-      ...invoice,
-      installmentPlan: updatedPlan,
-      paidAmount,
-      remainingAmount: invoice.total - paidAmount,
-      paymentStatus: paidAmount >= invoice.total ? "paid" : "partial",
-    };
-
-    await db.update("invoices", updatedInvoice);
-
-    // Update customer balance
-    if (invoice.customerId) {
-      const customer = await db.get<Customer>("customers", invoice.customerId);
-      if (customer) {
-        customer.currentBalance -= updatedPlan.payments[paymentIndex].amount;
-        await db.update("customers", customer);
-      }
+    if (!selectedPaymentMethodId) {
+      toast.error("الرجاء اختيار طريقة الدفع أولاً");
+      return;
     }
 
-    toast.success("تم تسجيل دفعة التقسيط بنجاح");
-    loadInstallments();
-    setSelectedInvoice(null);
-    setIsPaymentDialogOpen(false);
+    try {
+      const updatedPlan = { ...invoice.installmentPlan };
+      const paymentIndex = updatedPlan.payments.findIndex(
+        (p) => p.id === installmentId
+      );
+
+      if (paymentIndex === -1) return;
+
+      const installmentAmount = updatedPlan.payments[paymentIndex].amount;
+
+      updatedPlan.payments[paymentIndex] = {
+        ...updatedPlan.payments[paymentIndex],
+        paid: true,
+        paidDate: new Date().toISOString(),
+      };
+
+      const paidAmount = updatedPlan.payments
+        .filter((p) => p.paid)
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const updatedInvoice: Invoice = {
+        ...invoice,
+        installmentPlan: updatedPlan,
+        paidAmount,
+        remainingAmount: invoice.total - paidAmount,
+        paymentStatus: paidAmount >= invoice.total ? "paid" : "partial",
+      };
+
+      await db.update("invoices", updatedInvoice);
+
+      // Update customer balance
+      if (invoice.customerId) {
+        const customer = await db.get<Customer>("customers", invoice.customerId);
+        if (customer) {
+          customer.currentBalance -= installmentAmount;
+          await db.update("customers", customer);
+        }
+      }
+
+      // Create payment record for tracking
+      const selectedMethod = paymentMethods.find(
+        (m) => m.id === selectedPaymentMethodId
+      );
+      const paymentRecord = {
+        id: `installment_payment_${Date.now()}`,
+        invoiceId: invoice.id,
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        amount: installmentAmount,
+        paymentMethodId: selectedPaymentMethodId,
+        paymentMethodName: selectedMethod?.name || "غير محدد",
+        paymentType: "installment_payment",
+        shiftId: currentShift?.id,
+        createdAt: new Date().toISOString(),
+      };
+      await db.add("payments", paymentRecord);
+
+      // Update shift sales
+      if (currentShift) {
+        const shift = await db.get<any>("shifts", currentShift.id);
+        if (shift) {
+          const updatedShift = { ...shift };
+          if (selectedMethod?.type === "cash") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cashSales: (updatedShift.sales?.cashSales || 0) + installmentAmount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + installmentAmount,
+            };
+          } else if (
+            selectedMethod?.type === "visa" ||
+            selectedMethod?.type === "bank_transfer"
+          ) {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cardSales: (updatedShift.sales?.cardSales || 0) + installmentAmount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + installmentAmount,
+            };
+          } else if (selectedMethod?.type === "wallet") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              walletSales: (updatedShift.sales?.walletSales || 0) + installmentAmount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + installmentAmount,
+            };
+          }
+          await db.update("shifts", updatedShift);
+        }
+      }
+
+      toast.success("تم تسجيل دفعة التقسيط بنجاح");
+      loadInstallments();
+      setSelectedInvoice(null);
+      setIsPaymentDialogOpen(false);
+    } catch (error) {
+      console.error("Payment error:", error);
+      toast.error("حدث خطأ أثناء تسجيل الدفعة");
+    }
   };
 
   const openPaymentDialog = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    const cashMethod = paymentMethods.find((m) => m.type === "cash");
+    setSelectedPaymentMethodId(cashMethod?.id || paymentMethods[0]?.id || "");
     setIsPaymentDialogOpen(true);
   };
 
@@ -206,15 +287,15 @@ export default function Installments() {
                           invoice.paymentStatus === "paid"
                             ? "default"
                             : invoice.paymentStatus === "partial"
-                            ? "secondary"
-                            : "destructive"
+                              ? "secondary"
+                              : "destructive"
                         }
                       >
                         {invoice.paymentStatus === "paid"
                           ? "مكتمل"
                           : invoice.paymentStatus === "partial"
-                          ? "جزئي"
-                          : "غير مدفوع"}
+                            ? "جزئي"
+                            : "غير مدفوع"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -285,6 +366,26 @@ export default function Installments() {
                     </div>
                   </div>
 
+                  {/* اختيار طريقة الدفع */}
+                  <div className="space-y-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <Label className="font-semibold">طريقة الدفع لتسديد القسط</Label>
+                    <Select
+                      value={selectedPaymentMethodId}
+                      onValueChange={setSelectedPaymentMethodId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر طريقة الدفع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentMethods.map((method) => (
+                          <SelectItem key={method.id} value={method.id}>
+                            {method.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -318,15 +419,15 @@ export default function Installments() {
                                     payment.paid
                                       ? "default"
                                       : isOverdue
-                                      ? "destructive"
-                                      : "secondary"
+                                        ? "destructive"
+                                        : "secondary"
                                   }
                                 >
                                   {payment.paid
                                     ? "مدفوع"
                                     : isOverdue
-                                    ? "متأخر"
-                                    : "معلق"}
+                                      ? "متأخر"
+                                      : "معلق"}
                                 </Badge>
                               </TableCell>
                               <TableCell>

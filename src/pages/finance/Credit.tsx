@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { POSHeader } from "@/components/POS/POSHeader";
-import { db, Invoice, Customer } from "@/shared/lib/indexedDB";
+import { db, Invoice, Customer, PaymentMethod } from "@/shared/lib/indexedDB";
 import { toast } from "sonner";
 import {
   CreditCard,
@@ -29,6 +29,7 @@ import {
   User,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useShift } from "@/contexts/ShiftContext";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ import {
 
 export default function Credit() {
   const { can } = useAuth();
+  const { currentShift } = useShift();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -51,6 +53,8 @@ export default function Credit() {
     useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCustomerId, setFilterCustomerId] = useState<string>("all");
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
 
   useEffect(() => {
     loadData();
@@ -65,11 +69,17 @@ export default function Credit() {
 
     const allCustomers = await db.getAll<Customer>("customers");
     setCustomers(allCustomers);
+
+    // Load payment methods
+    const methods = await db.getAll<PaymentMethod>("paymentMethods");
+    setPaymentMethods(methods.filter((m) => m.isActive));
   };
 
   const openPaymentDialog = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setPaymentAmount("");
+    const cashMethod = paymentMethods.find((m) => m.type === "cash");
+    setSelectedPaymentMethodId(cashMethod?.id || paymentMethods[0]?.id || "");
     setIsPaymentDialogOpen(true);
   };
 
@@ -87,38 +97,98 @@ export default function Credit() {
       return;
     }
 
-    const updatedInvoice: Invoice = {
-      ...selectedInvoice,
-      paidAmount: selectedInvoice.paidAmount + amount,
-      remainingAmount: selectedInvoice.remainingAmount - amount,
-      paymentStatus:
-        selectedInvoice.remainingAmount - amount <= 0 ? "paid" : "partial",
-    };
-
-    await db.update("invoices", updatedInvoice);
-
-    // Update customer balance
-    if (selectedInvoice.customerId) {
-      const customer = await db.get<Customer>(
-        "customers",
-        selectedInvoice.customerId
-      );
-      if (customer) {
-        customer.currentBalance -= amount;
-        await db.update("customers", customer);
-      }
+    if (!selectedPaymentMethodId) {
+      toast.error("الرجاء اختيار طريقة الدفع");
+      return;
     }
 
-    toast.success("تم تسجيل الدفعة بنجاح");
-    loadData();
-    setIsPaymentDialogOpen(false);
-    setSelectedInvoice(null);
+    try {
+      const updatedInvoice: Invoice = {
+        ...selectedInvoice,
+        paidAmount: selectedInvoice.paidAmount + amount,
+        remainingAmount: selectedInvoice.remainingAmount - amount,
+        paymentStatus:
+          selectedInvoice.remainingAmount - amount <= 0 ? "paid" : "partial",
+      };
+
+      await db.update("invoices", updatedInvoice);
+
+      // Update customer balance
+      if (selectedInvoice.customerId) {
+        const customer = await db.get<Customer>(
+          "customers",
+          selectedInvoice.customerId
+        );
+        if (customer) {
+          customer.currentBalance -= amount;
+          await db.update("customers", customer);
+        }
+      }
+
+      // Create payment record for tracking
+      const selectedMethod = paymentMethods.find(
+        (m) => m.id === selectedPaymentMethodId
+      );
+      const paymentRecord = {
+        id: `credit_payment_${Date.now()}`,
+        invoiceId: selectedInvoice.id,
+        customerId: selectedInvoice.customerId,
+        amount: amount,
+        paymentMethodId: selectedPaymentMethodId,
+        paymentMethodName: selectedMethod?.name || "غير محدد",
+        paymentType: "credit_payment",
+        shiftId: currentShift?.id,
+        createdAt: new Date().toISOString(),
+      };
+      await db.add("payments", paymentRecord);
+
+      // Update shift sales
+      if (currentShift) {
+        const shift = await db.get<any>("shifts", currentShift.id);
+        if (shift) {
+          const updatedShift = { ...shift };
+          if (selectedMethod?.type === "cash") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cashSales: (updatedShift.sales?.cashSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (
+            selectedMethod?.type === "visa" ||
+            selectedMethod?.type === "bank_transfer"
+          ) {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cardSales: (updatedShift.sales?.cardSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (selectedMethod?.type === "wallet") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              walletSales: (updatedShift.sales?.walletSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          }
+          await db.update("shifts", updatedShift);
+        }
+      }
+
+      toast.success("تم تسجيل الدفعة بنجاح");
+      loadData();
+      setIsPaymentDialogOpen(false);
+      setSelectedInvoice(null);
+    } catch (error) {
+      console.error("Payment error:", error);
+      toast.error("حدث خطأ أثناء تسجيل الدفعة");
+    }
   };
 
   // دفع من رصيد العميل الإجمالي
   const openCustomerPaymentDialog = (customer: Customer) => {
     setSelectedCustomer(customer);
     setPaymentAmount("");
+    const cashMethod = paymentMethods.find((m) => m.type === "cash");
+    setSelectedPaymentMethodId(cashMethod?.id || paymentMethods[0]?.id || "");
     setIsCustomerPaymentDialogOpen(true);
   };
 
@@ -136,57 +206,117 @@ export default function Credit() {
       return;
     }
 
-    // جلب جميع فواتير العميل الآجلة
-    const customerInvoices = invoices
-      .filter(
-        (inv) =>
-          inv.customerId === selectedCustomer.id && inv.remainingAmount > 0
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ); // الأقدم أولاً
-
-    let remainingPayment = amount;
-
-    // توزيع المبلغ على الفواتير من الأقدم للأحدث
-    for (const invoice of customerInvoices) {
-      if (remainingPayment <= 0) break;
-
-      const paymentForThisInvoice = Math.min(
-        remainingPayment,
-        invoice.remainingAmount
-      );
-
-      const updatedInvoice: Invoice = {
-        ...invoice,
-        paidAmount: invoice.paidAmount + paymentForThisInvoice,
-        remainingAmount: invoice.remainingAmount - paymentForThisInvoice,
-        paymentStatus:
-          invoice.remainingAmount - paymentForThisInvoice <= 0.01
-            ? "paid"
-            : "partial",
-      };
-
-      await db.update("invoices", updatedInvoice);
-      remainingPayment -= paymentForThisInvoice;
+    if (!selectedPaymentMethodId) {
+      toast.error("الرجاء اختيار طريقة الدفع");
+      return;
     }
 
-    // تحديث رصيد العميل
-    const updatedCustomer: Customer = {
-      ...selectedCustomer,
-      currentBalance: selectedCustomer.currentBalance - amount,
-    };
-    await db.update("customers", updatedCustomer);
+    try {
+      // جلب جميع فواتير العميل الآجلة
+      const customerInvoices = invoices
+        .filter(
+          (inv) =>
+            inv.customerId === selectedCustomer.id && inv.remainingAmount > 0
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        ); // الأقدم أولاً
 
-    toast.success(`تم تسجيل دفعة بقيمة ${amount.toFixed(2)} جنيه`);
-    loadData();
-    setIsCustomerPaymentDialogOpen(false);
-    setSelectedCustomer(null);
+      let remainingPayment = amount;
+
+      // توزيع المبلغ على الفواتير من الأقدم للأحدث
+      for (const invoice of customerInvoices) {
+        if (remainingPayment <= 0) break;
+
+        const paymentForThisInvoice = Math.min(
+          remainingPayment,
+          invoice.remainingAmount
+        );
+
+        const updatedInvoice: Invoice = {
+          ...invoice,
+          paidAmount: invoice.paidAmount + paymentForThisInvoice,
+          remainingAmount: invoice.remainingAmount - paymentForThisInvoice,
+          paymentStatus:
+            invoice.remainingAmount - paymentForThisInvoice <= 0.01
+              ? "paid"
+              : "partial",
+        };
+
+        await db.update("invoices", updatedInvoice);
+        remainingPayment -= paymentForThisInvoice;
+      }
+
+      // تحديث رصيد العميل
+      const updatedCustomer: Customer = {
+        ...selectedCustomer,
+        currentBalance: selectedCustomer.currentBalance - amount,
+      };
+      await db.update("customers", updatedCustomer);
+
+      // Create payment record for tracking
+      const selectedMethod = paymentMethods.find(
+        (m) => m.id === selectedPaymentMethodId
+      );
+      const paymentRecord = {
+        id: `credit_payment_${Date.now()}`,
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        amount: amount,
+        paymentMethodId: selectedPaymentMethodId,
+        paymentMethodName: selectedMethod?.name || "غير محدد",
+        paymentType: "credit_payment",
+        shiftId: currentShift?.id,
+        createdAt: new Date().toISOString(),
+      };
+      await db.add("payments", paymentRecord);
+
+      // Update shift sales
+      if (currentShift) {
+        const shift = await db.get<any>("shifts", currentShift.id);
+        if (shift) {
+          const updatedShift = { ...shift };
+          if (selectedMethod?.type === "cash") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cashSales: (updatedShift.sales?.cashSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (
+            selectedMethod?.type === "visa" ||
+            selectedMethod?.type === "bank_transfer"
+          ) {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              cardSales: (updatedShift.sales?.cardSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          } else if (selectedMethod?.type === "wallet") {
+            updatedShift.sales = {
+              ...updatedShift.sales,
+              walletSales: (updatedShift.sales?.walletSales || 0) + amount,
+              totalAmount: (updatedShift.sales?.totalAmount || 0) + amount,
+            };
+          }
+          await db.update("shifts", updatedShift);
+        }
+      }
+
+      toast.success(`تم تسجيل دفعة بقيمة ${amount.toFixed(2)} جنيه`);
+      loadData();
+      setIsCustomerPaymentDialogOpen(false);
+      setSelectedCustomer(null);
+    } catch (error) {
+      console.error("Payment error:", error);
+      toast.error("حدث خطأ أثناء تسجيل الدفعة");
+    }
   };
 
   const getTotalCredit = () => {
-    return invoices.reduce((sum, inv) => sum + inv.remainingAmount, 0);
+    // استخدام رصيد العملاء الفعلي بدل حساب من الفواتير
+    // لأن التسديدات بتحدث customer.currentBalance مباشرة
+    return customers.reduce((sum, c) => sum + (c.currentBalance || 0), 0);
   };
 
   const getOverdueInvoices = () => {
@@ -215,33 +345,20 @@ export default function Credit() {
 
   // الحصول على قائمة العملاء الذين لديهم ديون
   const getCustomersWithDebts = () => {
-    const customersMap = new Map<
-      string,
-      { customer: Customer; totalDebt: number; invoiceCount: number }
-    >();
-
-    invoices
-      .filter((inv) => inv.remainingAmount > 0)
-      .forEach((inv) => {
-        if (inv.customerId) {
-          const customer = customers.find((c) => c.id === inv.customerId);
-          if (customer) {
-            const existing = customersMap.get(inv.customerId);
-            if (existing) {
-              existing.totalDebt += inv.remainingAmount;
-              existing.invoiceCount += 1;
-            } else {
-              customersMap.set(inv.customerId, {
-                customer,
-                totalDebt: inv.remainingAmount,
-                invoiceCount: 1,
-              });
-            }
-          }
-        }
+    // استخدام customer.currentBalance مباشرة بدل حساب من الفواتير
+    // لأن التسديدات بتحدث customer.currentBalance
+    return customers
+      .filter((c) => (c.currentBalance || 0) > 0)
+      .map((customer) => {
+        const customerInvoices = invoices.filter(
+          (inv) => inv.customerId === customer.id && inv.remainingAmount > 0
+        );
+        return {
+          customer,
+          totalDebt: customer.currentBalance || 0,
+          invoiceCount: customerInvoices.length,
+        };
       });
-
-    return Array.from(customersMap.values());
   };
 
   // تصفية الفواتير حسب البحث والعميل
@@ -470,19 +587,19 @@ export default function Credit() {
                             invoice.paymentStatus === "paid"
                               ? "default"
                               : invoice.paymentStatus === "partial"
-                              ? "secondary"
-                              : isOverdue
-                              ? "destructive"
-                              : "outline"
+                                ? "secondary"
+                                : isOverdue
+                                  ? "destructive"
+                                  : "outline"
                           }
                         >
                           {invoice.paymentStatus === "paid"
                             ? "مكتمل"
                             : invoice.paymentStatus === "partial"
-                            ? "جزئي"
-                            : isOverdue
-                            ? "متأخر"
-                            : "غير مدفوع"}
+                              ? "جزئي"
+                              : isOverdue
+                                ? "متأخر"
+                                : "غير مدفوع"}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -554,6 +671,26 @@ export default function Credit() {
                         {selectedInvoice.paidAmount.toFixed(2)} جنيه
                       </p>
                     </div>
+                  </div>
+
+                  {/* اختيار طريقة الدفع */}
+                  <div className="space-y-2">
+                    <Label>طريقة الدفع</Label>
+                    <Select
+                      value={selectedPaymentMethodId}
+                      onValueChange={setSelectedPaymentMethodId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر طريقة الدفع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentMethods.map((method) => (
+                          <SelectItem key={method.id} value={method.id}>
+                            {method.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -629,6 +766,26 @@ export default function Credit() {
                       <strong>ملاحظة:</strong> سيتم توزيع المبلغ تلقائياً على
                       جميع فواتير العميل بدءاً من الأقدم إلى الأحدث.
                     </p>
+                  </div>
+
+                  {/* اختيار طريقة الدفع */}
+                  <div className="space-y-2">
+                    <Label>طريقة الدفع</Label>
+                    <Select
+                      value={selectedPaymentMethodId}
+                      onValueChange={setSelectedPaymentMethodId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر طريقة الدفع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentMethods.map((method) => (
+                          <SelectItem key={method.id} value={method.id}>
+                            {method.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">

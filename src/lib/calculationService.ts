@@ -145,7 +145,14 @@ export function calculatePaymentMethodBreakdown(
       Object.entries(inv.paymentMethodAmounts).forEach(
         ([methodId, amount]: [string, any]) => {
           let amountValue = parseFloat(amount) || 0;
-          // if amount is zero and the payment methods is one and named default-payment-cash will take the total of the invoice
+
+          // معالجة الداتا القديمة: لو الفاتورة نقدية وطريقة الدفع متحددة لكن المبلغ = 0
+          // فدا معناه إن العميل دفع كل المبلغ (باق من داتا قديمة)
+          if (amountValue === 0 && inv.paymentType === "cash") {
+            amountValue = inv.total || 0;
+          }
+
+          // معالجة default-payment-cash القديمة
           if (amountValue === 0 && methodId === "default-payment-cash") {
             amountValue = inv.total || 0;
           }
@@ -153,10 +160,9 @@ export function calculatePaymentMethodBreakdown(
           if (breakdown[methodId]) {
             breakdown[methodId].amount += amountValue;
           } else {
-            // طريقة دفع غير موجودة في النظام
-            const method = inv.paymentMethods?.find?.(
-              (pm: any) => pm.id === methodId || pm.id === methodId.toString()
-            );
+            // طريقة دفع غير موجودة في القائمة الأساسية - نبحث عنها
+            // مهم: نبحث في paymentMethods الأصلية مش في الفاتورة
+            const method = paymentMethods.find((pm: any) => pm.id === methodId || pm.id === methodId.toString());
             breakdown[methodId] = {
               name: method?.name || methodId,
               amount: amountValue,

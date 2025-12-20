@@ -37,6 +37,16 @@ interface LicenseData {
   maxDevices?: number;
   lastOnlineCheck?: string; // آخر تحقق من السيرفر
   serverValidated?: boolean; // هل تم التحقق من السيرفر
+  // Sync credentials from server
+  clientId?: string;      // merchant ID for sync
+  branchId?: string;      // branch ID for sync
+  syncToken?: string;     // JWT for sync API
+  merchantName?: string;  // merchant name from server
+  // Sync settings from server
+  syncInterval?: number;      // milliseconds
+  enableSync?: boolean;
+  enableOfflineMode?: boolean;
+  autoUpdate?: boolean;
 }
 
 interface HardwareInfo {
@@ -170,10 +180,20 @@ interface ServerLicenseResponse {
   customerName?: string;
   isAlreadyActivated?: boolean;
   activatedDeviceId?: string;
+  // Sync credentials
+  clientId?: string;
+  branchId?: string;
+  syncToken?: string;
+  merchantName?: string;
+  // Sync settings
+  syncInterval?: number;
+  enableSync?: boolean;
+  enableOfflineMode?: boolean;
+  autoUpdate?: boolean;
 }
 
 /**
- * التحقق من الترخيص من السيرفر المركزي
+ * التحقق من الترخيص من السيرفر المركزي (يُرجع syncToken جديد)
  */
 async function validateLicenseOnline(
   licenseKey: string,
@@ -185,7 +205,8 @@ async function validateLicenseOnline(
   }
 
   try {
-    const response = await fetch(`${LICENSE_SERVER_URL}/validate`, {
+    // Use /verify endpoint which returns fresh syncToken
+    const response = await fetch(`${LICENSE_SERVER_URL}/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -198,14 +219,28 @@ async function validateLicenseOnline(
       }),
     });
 
+    // Handle server responses (including errors like 404)
+    const data = await response.json().catch(() => ({}));
+
     if (!response.ok) {
+      // 404 = License not found, 403 = Forbidden - these are VALID server responses
+      // meaning the license is invalid/expired, NOT a connection error
+      if (response.status === 404 || response.status === 403 || response.status === 400) {
+        console.log(`🔴 Server rejected license: ${response.status}`, data);
+        return {
+          success: true,  // Server responded successfully
+          valid: false,   // But license is invalid
+          message: data.message || "الترخيص غير موجود أو منتهي.",
+        };
+      }
+      // 500+ = Server error, treat as connection problem
       throw new Error(`Server error: ${response.status}`);
     }
 
-    return await response.json();
+    return data;
   } catch (error: any) {
     console.error("Online validation error:", error);
-    // في حالة فشل الاتصال، نسمح بالعمل offline مؤقتاً
+    // فقط في حالة فشل الاتصال الفعلي (network error) نسمح بالعمل offline
     return {
       success: false,
       message: "فشل الاتصال بالسيرفر. يعمل التطبيق في وضع offline.",
@@ -527,41 +562,64 @@ async function verifyLicense(): Promise<{
     }
   }
 
-  // التحقق من السيرفر (إذا مفعّل ومر وقت كافي من آخر تحقق)
+  // التحقق من السيرفر - دائماً عند فتح التطبيق (لتجديد syncToken)
   if (USE_ONLINE_VALIDATION) {
-    const lastCheck = licenseData.lastOnlineCheck
-      ? new Date(licenseData.lastOnlineCheck)
-      : null;
-    const hoursSinceLastCheck = lastCheck
-      ? (Date.now() - lastCheck.getTime()) / (1000 * 60 * 60)
-      : 999;
+    try {
+      console.log("🔄 Verifying license online and refreshing syncToken...");
+      const serverResult = await validateLicenseOnline(
+        licenseData.licenseKey,
+        currentDeviceId
+      );
 
-    // تحقق كل 24 ساعة
-    if (hoursSinceLastCheck > 24) {
-      try {
-        const serverResult = await validateLicenseOnline(
-          licenseData.licenseKey,
-          currentDeviceId
-        );
-
-        if (serverResult.success && serverResult.valid === false) {
-          // المفتاح غير صالح أو مُلغى من السيرفر
-          return {
-            valid: false,
-            message:
-              serverResult.message || "الترخيص غير صالح. تواصل مع الدعم الفني.",
-          };
-        }
-
-        // تحديث آخر تحقق
-        if (serverResult.success) {
-          licenseData.lastOnlineCheck = new Date().toISOString();
-          saveLicenseData(licenseData);
-        }
-      } catch (error) {
-        // في حالة فشل الاتصال، نسمح بالعمل offline
-        console.warn("Online check failed, continuing offline:", error);
+      if (serverResult.success && serverResult.valid === false) {
+        // المفتاح غير صالح أو مُلغى من السيرفر - نحذف الملف المحلي
+        console.log("🔴 License rejected by server, deleting local license file...");
+        deleteLicenseData();
+        return {
+          valid: false,
+          message:
+            serverResult.message || "الترخيص غير صالح. تواصل مع الدعم الفني.",
+        };
       }
+
+      // تحديث البيانات وsyncToken الجديد
+      if (serverResult.success && serverResult.valid) {
+        licenseData.lastOnlineCheck = new Date().toISOString();
+        licenseData.serverValidated = true;
+
+        // Refresh sync credentials if returned from server
+        if (serverResult.syncToken) {
+          licenseData.syncToken = serverResult.syncToken;
+          console.log("✅ syncToken refreshed from server");
+        }
+        if (serverResult.clientId) {
+          licenseData.clientId = serverResult.clientId;
+        }
+        if (serverResult.branchId) {
+          licenseData.branchId = serverResult.branchId;
+        }
+        if (serverResult.merchantName) {
+          licenseData.merchantName = serverResult.merchantName;
+        }
+        // Update sync settings
+        if (serverResult.syncInterval !== undefined) {
+          licenseData.syncInterval = serverResult.syncInterval;
+        }
+        if (serverResult.enableSync !== undefined) {
+          licenseData.enableSync = serverResult.enableSync;
+        }
+        if (serverResult.enableOfflineMode !== undefined) {
+          licenseData.enableOfflineMode = serverResult.enableOfflineMode;
+        }
+        if (serverResult.autoUpdate !== undefined) {
+          licenseData.autoUpdate = serverResult.autoUpdate;
+        }
+
+        saveLicenseData(licenseData);
+      }
+    } catch (error) {
+      // في حالة فشل الاتصال، نسمح بالعمل offline
+      console.warn("Online check failed, continuing offline:", error);
     }
   }
 
@@ -610,6 +668,17 @@ async function activateLicense(
   // توليد Device ID
   const deviceId = generateDeviceId();
 
+  // Variables to store sync credentials from server
+  let clientId: string | undefined;
+  let branchId: string | undefined;
+  let syncToken: string | undefined;
+  let merchantName: string | undefined;
+  // Variables to store sync settings from server (with defaults)
+  let syncInterval: number = 300000; // 5 minutes default
+  let enableSync: boolean = true;
+  let enableOfflineMode: boolean = false;
+  let autoUpdate: boolean = true;
+
   // التحقق من السيرفر المركزي (إذا مفعّل)
   if (USE_ONLINE_VALIDATION) {
     const serverResponse = await activateLicenseOnline(
@@ -639,6 +708,16 @@ async function activateLicense(
     if (serverResponse.customerName) {
       customerName = serverResponse.customerName;
     }
+    // Store sync credentials from server
+    clientId = (serverResponse as any).clientId;
+    branchId = (serverResponse as any).branchId;
+    syncToken = (serverResponse as any).syncToken;
+    merchantName = (serverResponse as any).merchantName || customerName;
+    // Store sync settings from server
+    syncInterval = (serverResponse as any).syncInterval ?? 300000;
+    enableSync = (serverResponse as any).enableSync ?? true;
+    enableOfflineMode = (serverResponse as any).enableOfflineMode ?? false;
+    autoUpdate = (serverResponse as any).autoUpdate ?? true;
   }
 
   // إنشاء بيانات الترخيص
@@ -650,6 +729,16 @@ async function activateLicense(
     customerName: customerName || undefined,
     lastOnlineCheck: new Date().toISOString(),
     serverValidated: USE_ONLINE_VALIDATION,
+    // Sync credentials from server
+    clientId,
+    branchId,
+    syncToken,
+    merchantName,
+    // Sync settings from server
+    syncInterval,
+    enableSync,
+    enableOfflineMode,
+    autoUpdate,
   };
 
   // حفظ الترخيص
@@ -789,6 +878,27 @@ export function registerLicenseHandlers() {
     }
 
     return result;
+  });
+
+  // Get sync credentials and settings for API authentication
+  ipcMain.handle("license:get-sync-credentials", async () => {
+    const result = await verifyLicense();
+    if (result.valid && result.data) {
+      return {
+        success: true,
+        // Sync credentials
+        clientId: result.data.clientId,
+        branchId: result.data.branchId,
+        syncToken: result.data.syncToken,
+        merchantName: result.data.merchantName,
+        // Sync settings
+        syncInterval: result.data.syncInterval ?? 300000,
+        enableSync: result.data.enableSync ?? true,
+        enableOfflineMode: result.data.enableOfflineMode ?? false,
+        autoUpdate: result.data.autoUpdate ?? true,
+      };
+    }
+    return { success: false, message: result.message };
   });
 }
 

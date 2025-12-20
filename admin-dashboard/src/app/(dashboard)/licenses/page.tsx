@@ -48,7 +48,9 @@ import {
     Trash2,
     Loader2,
     Check,
+    Settings,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import api from '@/lib/api';
 import type { License } from '@/types';
 
@@ -71,6 +73,11 @@ export default function LicensesPage() {
         expiresAt: '',
         maxDevices: 1,
         notes: '',
+        // Sync settings
+        syncInterval: 300000, // 5 minutes default
+        enableSync: true,
+        enableOfflineMode: false,
+        autoUpdate: true,
     });
 
     // Fetch clients for dropdown
@@ -197,6 +204,11 @@ export default function LicensesPage() {
                 expiresAt,
                 maxDevices: newLicense.maxDevices,
                 notes: newLicense.notes || null,
+                // Sync settings
+                syncInterval: newLicense.syncInterval,
+                enableSync: newLicense.enableSync,
+                enableOfflineMode: newLicense.enableOfflineMode,
+                autoUpdate: newLicense.autoUpdate,
             });
 
             setShowCreateDialog(false);
@@ -205,6 +217,10 @@ export default function LicensesPage() {
                 expiresAt: '',
                 maxDevices: 1,
                 notes: '',
+                syncInterval: 300000,
+                enableSync: true,
+                enableOfflineMode: false,
+                autoUpdate: true,
             });
             fetchLicenses();
         } catch (error) {
@@ -456,6 +472,58 @@ export default function LicensesPage() {
                                 onChange={(e) => setNewLicense({ ...newLicense, notes: e.target.value })}
                                 placeholder="ملاحظات إضافية..."
                             />
+                        </div>
+
+                        {/* Sync Settings Section */}
+                        <div className="border-t pt-4 mt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Settings className="h-4 w-4" />
+                                <span className="font-medium">إعدادات المزامنة</span>
+                            </div>
+                            <div className="grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="syncInterval">فترة المزامنة</Label>
+                                    <Select
+                                        value={String(newLicense.syncInterval)}
+                                        onValueChange={(value) => setNewLicense({ ...newLicense, syncInterval: parseInt(value) })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="اختر الفترة" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="60000">كل دقيقة</SelectItem>
+                                            <SelectItem value="180000">كل 3 دقائق</SelectItem>
+                                            <SelectItem value="300000">كل 5 دقائق</SelectItem>
+                                            <SelectItem value="600000">كل 10 دقائق</SelectItem>
+                                            <SelectItem value="1800000">كل 30 دقيقة</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="enableSync">تفعيل المزامنة</Label>
+                                    <Switch
+                                        id="enableSync"
+                                        checked={newLicense.enableSync}
+                                        onCheckedChange={(checked) => setNewLicense({ ...newLicense, enableSync: checked })}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="enableOfflineMode">وضع عدم الاتصال</Label>
+                                    <Switch
+                                        id="enableOfflineMode"
+                                        checked={newLicense.enableOfflineMode}
+                                        onCheckedChange={(checked) => setNewLicense({ ...newLicense, enableOfflineMode: checked })}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="autoUpdate">التحديث التلقائي</Label>
+                                    <Switch
+                                        id="autoUpdate"
+                                        checked={newLicense.autoUpdate}
+                                        onCheckedChange={(checked) => setNewLicense({ ...newLicense, autoUpdate: checked })}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

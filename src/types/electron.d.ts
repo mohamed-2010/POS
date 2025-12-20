@@ -47,6 +47,22 @@ declare global {
           };
         }>;
         generateKey: () => Promise<string | null>;
+        // Sync credentials for API authentication
+        getSyncCredentials: () => Promise<{
+          success: boolean;
+          // Credentials
+          clientId?: string;
+          branchId?: string;
+          syncToken?: string;
+          merchantName?: string;
+          // Settings
+          syncInterval?: number;
+          enableSync?: boolean;
+          enableOfflineMode?: boolean;
+          autoUpdate?: boolean;
+          // Error
+          message?: string;
+        }>;
       };
       whatsapp: {
         initAccount: (
@@ -112,4 +128,4 @@ declare global {
   }
 }
 
-export {};
+export { };

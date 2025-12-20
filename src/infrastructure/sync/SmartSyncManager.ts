@@ -51,23 +51,71 @@ export interface SmartSyncConfig {
 
 type SyncStatus = 'idle' | 'syncing' | 'pulling' | 'pushing' | 'offline' | 'error';
 
-// Syncable tables configuration
+// Syncable tables configuration - all tables that should sync to server
 const SYNCABLE_TABLES = [
+    // Core products & inventory
     'products',
     'product_categories',
-    'customers',
-    'suppliers',
-    'employees',
-    'invoices',
-    'purchases',
-    'expenses',
-    'shifts',
+    'product_units',
     'units',
     'price_types',
     'warehouses',
-    'audit_logs',
+    // People
+    'customers',
+    'suppliers',
+    'employees',
+    // Sales
+    'invoices',
+    'invoice_items',
+    'sales_returns',
+    // Purchases
+    'purchases',
+    'purchase_items',
+    'purchase_returns',
+    // Finance
+    'expenses',
+    'expense_categories',
+    'expense_items',
+    'deposits',
+    'deposit_sources',
     'payments',
+    'payment_methods',
+    // Operations
+    'shifts',
+    // Settings & Audit
+    'settings',
+    'audit_logs',
 ];
+
+// Mapping from snake_case table names to camelCase IndexedDB store names
+const TABLE_TO_STORE_MAP: Record<string, string> = {
+    'product_categories': 'productCategories',
+    'product_units': 'productUnits',
+    'price_types': 'priceTypes',
+    'invoice_items': 'invoiceItems',
+    'sales_returns': 'salesReturns',
+    'purchase_items': 'purchaseItems',
+    'purchase_returns': 'purchaseReturns',
+    'expense_categories': 'expenseCategories',
+    'expense_items': 'expenseItems',
+    'deposit_sources': 'depositSources',
+    'payment_methods': 'paymentMethods',
+    'audit_logs': 'auditLogs',
+};
+
+// Helper function to get the store name from table name
+function getStoreName(tableName: string): string {
+    return TABLE_TO_STORE_MAP[tableName] || tableName;
+}
+
+// Helper function to get the table name from store name (reverse mapping)
+function getTableName(storeName: string): string {
+    const reverseMap = Object.entries(TABLE_TO_STORE_MAP).reduce((acc, [table, store]) => {
+        acc[store] = table;
+        return acc;
+    }, {} as Record<string, string>);
+    return reverseMap[storeName] || storeName;
+}
 
 export class SmartSyncManager extends EventEmitter {
     private httpClient: FastifyClient;
@@ -285,7 +333,8 @@ export class SmartSyncManager extends EventEmitter {
      */
     private async applyServerRecord(tableName: string, record: any): Promise<void> {
         const db = getDatabaseService();
-        const repo = db.getRepository(tableName);
+        const storeName = getStoreName(tableName);
+        const repo = db.getRepository(storeName);
 
         try {
             const localRecord = await repo.getById(record.id);
@@ -349,7 +398,8 @@ export class SmartSyncManager extends EventEmitter {
 
             for (const tableName of SYNCABLE_TABLES) {
                 try {
-                    const repo = db.getRepository(tableName);
+                    const storeName = getStoreName(tableName);
+                    const repo = db.getRepository(storeName);
                     const unsynced = await repo.getUnsyncedRecords();
 
                     for (const record of unsynced) {
@@ -401,13 +451,23 @@ export class SmartSyncManager extends EventEmitter {
             errors: [],
         };
 
-        const requestRecords = records.map(({ table, record }) => ({
-            table_name: table,
-            record_id: record.id,
-            data: record,
-            local_updated_at: record.local_updated_at || new Date().toISOString(),
-            is_deleted: record.is_deleted || false,
-        }));
+        const requestRecords = records.map(({ table, record }) => {
+            // Settings table uses 'key' as primary key, others use 'id'
+            let recordId: string;
+            if (table === 'settings') {
+                recordId = record.key || record.id || `settings-${Date.now()}`;
+            } else {
+                recordId = record.id;
+            }
+
+            return {
+                table_name: table,
+                record_id: recordId,
+                data: record,
+                local_updated_at: record.local_updated_at || new Date().toISOString(),
+                is_deleted: record.is_deleted || false,
+            };
+        });
 
         try {
             const response = await this.httpClient.post<{
@@ -429,14 +489,17 @@ export class SmartSyncManager extends EventEmitter {
             );
 
             for (const { table, record } of records) {
-                const key = `${table}:${record.id}`;
-                if (!errorSet.has(key)) {
+                // Settings table uses 'key' as primary key
+                const recordKey = table === 'settings' ? (record.key || record.id) : record.id;
+                const errorKey = `${table}:${recordKey}`;
+                if (!errorSet.has(errorKey)) {
                     // Mark as synced
                     try {
-                        const repo = db.getRepository(table);
-                        await repo.markAsSynced(record.id);
+                        const storeName = getStoreName(table);
+                        const repo = db.getRepository(storeName);
+                        await repo.markAsSynced(recordKey);
                     } catch (e) {
-                        console.warn(`[SmartSync] Could not mark ${table}:${record.id} as synced`);
+                        console.warn(`[SmartSync] Could not mark ${table}:${recordKey} as synced`);
                     }
                 }
             }
@@ -478,7 +541,8 @@ export class SmartSyncManager extends EventEmitter {
 
         try {
             const db = getDatabaseService();
-            const repo = db.getRepository(event.table);
+            const storeName = getStoreName(event.table);
+            const repo = db.getRepository(storeName);
 
             switch (event.operation) {
                 case 'create':
@@ -539,23 +603,32 @@ export class SmartSyncManager extends EventEmitter {
 
     /**
      * Resolve a sync conflict using Last Write Wins
+     * Conflict structure from server:
+     * { table_name, record_id, local_data, server_data, local_updated_at, server_updated_at }
      */
     private async resolveConflict(conflict: any): Promise<void> {
-        const { table, local, server } = conflict;
+        const { table_name, record_id, local_updated_at, server_updated_at } = conflict;
 
-        const localTime = new Date(local?.local_updated_at || 0).getTime();
-        const serverTime = new Date(server?.server_updated_at || 0).getTime();
+        const localTime = new Date(local_updated_at || 0).getTime();
+        const serverTime = new Date(server_updated_at || 0).getTime();
 
-        console.log(`[SmartSync] Resolving conflict for ${table}/${local?.id}: local=${localTime}, server=${serverTime}`);
+        console.log(`[SmartSync] Resolving conflict for ${table_name}/${record_id}: local=${localTime}, server=${serverTime}`);
 
-        if (serverTime >= localTime) {
-            // Server wins - apply server version locally
-            await this.applyServerRecord(table, server);
-            console.log(`[SmartSync] Conflict resolved: Server wins`);
-        } else {
-            // Local wins - push local version to server
-            console.log(`[SmartSync] Conflict resolved: Local wins (will push)`);
-            // Local version will be pushed in next sync cycle
+        const db = getDatabaseService();
+        const storeName = getStoreName(table_name);
+
+        try {
+            if (serverTime >= localTime) {
+                // Server wins - mark local record as synced (don't re-push)
+                const repo = db.getRepository(storeName);
+                await repo.markAsSynced(record_id);
+                console.log(`[SmartSync] Conflict resolved: Server wins, marked ${table_name}/${record_id} as synced`);
+            } else {
+                // Local wins - will be pushed in next sync cycle
+                console.log(`[SmartSync] Conflict resolved: Local wins (will push)`);
+            }
+        } catch (e) {
+            console.warn(`[SmartSync] Could not resolve conflict for ${table_name}/${record_id}:`, e);
         }
     }
 

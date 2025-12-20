@@ -192,16 +192,42 @@ export class SyncService {
           // Use normalized table name for all further operations
           const table_name = normalizedTableName;
 
-          // التحقق من وجود السجل على السيرفر
+          // التحقق من وجود السجل على السيرفر - check by id only (PRIMARY KEY)
           const [existingRows] = await connection.query<RowDataPacket[]>(
-            `SELECT id, server_updated_at, sync_version, is_deleted 
+            `SELECT id, server_updated_at, sync_version, is_deleted, client_id, branch_id 
              FROM ?? 
-             WHERE id = ? AND client_id = ? AND branch_id = ?`,
-            [table_name, record.record_id, client_id, branch_id]
+             WHERE id = ?`,
+            [table_name, record.record_id]
           );
 
           const existing = existingRows[0];
           const localTimestamp = new Date(record.local_updated_at).getTime();
+
+          // Special handling for invoice_items - check for duplicates by invoice_id + product_id
+          // This handles the case where backup restore generates new IDs with timestamps
+          if (table_name === 'invoice_items' && !existing && record.data) {
+            const invoiceId = record.data.invoice_id || record.data.invoiceId;
+            const productId = record.data.product_id || record.data.productId;
+            const quantity = record.data.quantity;
+
+            if (invoiceId && productId) {
+              const [duplicateCheck] = await connection.query<RowDataPacket[]>(
+                `SELECT id FROM ?? WHERE invoice_id = ? AND product_id = ? AND quantity = ? AND client_id = ? LIMIT 1`,
+                [table_name, invoiceId, productId, quantity, client_id]
+              );
+
+              if (duplicateCheck.length > 0) {
+                // Duplicate found - skip this record, it's already synced
+                logger.info({
+                  table_name,
+                  record_id: record.record_id,
+                  existing_id: duplicateCheck[0].id,
+                }, 'Skipping duplicate invoice_item');
+                response.synced_count++; // Count as synced since data already exists
+                continue;
+              }
+            }
+          }
 
           if (existing) {
             const serverTimestamp = new Date(
@@ -430,7 +456,7 @@ export class SyncService {
   }
 
   /**
-   * إدراج سجل جديد
+   * إدراج أو تحديث سجل (UPSERT)
    */
   private async insertRecord(
     connection: any,
@@ -451,8 +477,15 @@ export class SyncService {
 
     // Add metadata fields (id and is_deleted)
     // Note: transformedData already has client_id and branch_id
+    // For settings table, use record_id (which is the key) as part of id generation
+    let finalId = record_id;
+    if (table_name === 'settings' && !record_id.match(/^[0-9a-f]{8}-/i)) {
+      // Generate a stable id based on client_id + key for settings
+      finalId = `${client_id}-${record_id}`;
+    }
+
     const fields = {
-      id: record_id,
+      id: finalId,
       ...transformedData,
       is_deleted
     };
@@ -461,15 +494,20 @@ export class SyncService {
     const values = Object.values(fields);
     const placeholders = columns.map(() => "?").join(", ");
 
+    // Build ON DUPLICATE KEY UPDATE clause (excluding id)
+    const updateColumns = columns.filter(col => col !== 'id');
+    const updateClause = updateColumns.map(col => `${col} = VALUES(${col})`).join(", ");
+
     try {
       await connection.query(
         `INSERT INTO ?? (${columns.join(", ")}, server_updated_at, sync_version) 
-         VALUES (${placeholders}, NOW(), 1)`,
+         VALUES (${placeholders}, NOW(), 1)
+         ON DUPLICATE KEY UPDATE ${updateClause}, server_updated_at = NOW(), sync_version = sync_version + 1`,
         [table_name, ...values]
       );
     } catch (error: any) {
       // Log helpful error info
-      console.error(`Insert failed for ${table_name}:`, {
+      console.error(`Upsert failed for ${table_name}:`, {
         columns,
         error: error.message
       });
@@ -514,10 +552,8 @@ export class SyncService {
            is_deleted = ?, 
            server_updated_at = NOW(), 
            sync_version = sync_version + 1 
-       WHERE id = ? 
-       AND client_id = ? 
-       AND branch_id = ?`,
-      [table_name, ...values, is_deleted, record_id, client_id, branch_id]
+       WHERE id = ?`,
+      [table_name, ...values, is_deleted, record_id]
     );
   }
 

@@ -3,23 +3,30 @@ import { db } from "../../config/database.js";
 import { logger } from "../../config/logger.js";
 import { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
-// Generate license key
+// مفتاح التشفير السري - يجب أن يكون نفس المفتاح في الـ Electron
+const ENCRYPTION_SECRET = "MASR-POS-2024-SECURE-KEY-@#$%^&*";
+
+// Generate license key (format: 16 chars without dashes) with checksum
+// متوافق مع خوارزمية الـ Electron
 function generateLicenseKey(): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const segments = 4;
-    const segmentLength = 4;
-    const parts: string[] = ["HPOS"];
+    // توليد 12 حرف عشوائي
+    const randomPart = crypto
+        .randomBytes(6)
+        .toString("hex")
+        .toUpperCase()
+        .substring(0, 12);
 
-    for (let i = 0; i < segments - 1; i++) {
-        let segment = "";
-        for (let j = 0; j < segmentLength; j++) {
-            segment += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        parts.push(segment);
-    }
+    // حساب الـ checksum (آخر 4 أحرف)
+    const hash = crypto
+        .createHash("md5")
+        .update(randomPart + ENCRYPTION_SECRET)
+        .digest("hex");
+    const checksum = hash.substring(0, 4).toUpperCase();
 
-    return parts.join("-");
+    // Return key WITHOUT dashes (16 characters)
+    return randomPart + checksum;
 }
 
 async function adminLicensesRoutes(fastify: FastifyInstance) {
@@ -141,18 +148,32 @@ async function adminLicensesRoutes(fastify: FastifyInstance) {
             expiresAt?: string;
             maxDevices?: number;
             notes?: string;
+            // Sync settings
+            syncInterval?: number;
+            enableSync?: boolean;
+            enableOfflineMode?: boolean;
+            autoUpdate?: boolean;
         };
     }>("/", { preValidation: [fastify.authenticate] }, async (request, reply) => {
-        const { clientId, branchId, expiresAt, maxDevices, notes } = request.body;
+        const {
+            clientId, branchId, expiresAt, maxDevices, notes,
+            syncInterval, enableSync, enableOfflineMode, autoUpdate
+        } = request.body;
 
         try {
             const id = uuidv4();
             const licenseKey = generateLicenseKey();
 
             await db.query<ResultSetHeader>(
-                `INSERT INTO licenses (id, license_key, client_id, branch_id, expires_at, max_devices, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [id, licenseKey, clientId, branchId, expiresAt, maxDevices || 1, notes]
+                `INSERT INTO licenses (id, license_key, client_id, branch_id, expires_at, max_devices, notes, sync_interval, enable_sync, enable_offline_mode, auto_update)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    id, licenseKey, clientId, branchId, expiresAt, maxDevices || 1, notes,
+                    syncInterval ?? 300000, // default 5 min
+                    enableSync ?? true,
+                    enableOfflineMode ?? false,
+                    autoUpdate ?? true
+                ]
             );
 
             logger.info({ licenseId: id, licenseKey }, "License created");
